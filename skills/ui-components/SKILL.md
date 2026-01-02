@@ -3,153 +3,237 @@
 description: |
   Agents: Always follow this skill when creating or modifying any UI component. 
   Use Shadcn MCP + CLI to scaffold primitives and patterns; avoid hand-rolled UI. 
-  Conform to the variants matrix and canonical compositions.
+  Conform to the variants matrix, canonical compositions, and paper-like elevation.
 ---
 
 # UI Components Skill
 
 ## Quick Toolbelt
 - Init MCP (pick your client): `bunx --bun shadcn@latest mcp init --client opencode`
-- Add primitives fast: `bunx --bun shadcn@latest add button input select dialog table`
+- Add primitives fast: `bunx --bun shadcn@latest add button input select dialog table badge alert tabs`
 - Compose in `components/` using tokens and allowed variants
 
 ## Purpose
 
-Define an opinionated component vocabulary and variants matrix so UIs look cohesive across apps. This complements the Styling Skill by prescribing allowed variants, sizes, and compositions.
-
-## Design Principles (Ive Revision)
-- Reduction: Remove the unnecessary until only the essential remains.
-- Clarity: Hierarchy and contrast that are felt before they’re noticed.
-- Material Honesty: Tokens are the material; never fake depth or color.
-- Rhythm: Consistent vertical rhythm and measured line lengths guide reading.
-- Deference: Interface recedes so content and decisions come forward.
-- Poise: Motion is calm, purposeful, and barely there.
-- Care: Accessibility as craft—focus, contrast, and language refined.
-
-## Decision Heuristics (Ive Revision)
-- Actions: One primary action per view; prefer secondary/outline for the rest. Ghost is only for inline, low‑emphasis affordances. Destructive requires explicit confirmation; never default‑focused.
-- Composition: Page headers include title, short description, then primary and secondary actions. Keep copy to 60–72ch; avoid more than two font weights per page. Avoid centered body copy; reserve center alignment for simple empty states.
-- Elevation: Prefer 1px borders; avoid shadows unless separation is essential. Use `shadow-sm` sparingly; overlays rely on subtle borders and backdrops.
-- Density: Cozy by default; compact at container scope (`text-sm`, `gap-2/3`, `p-2/3`). Never reduce interactive hit targets below 40px.
-- Typography: H1 is unique per page; H2 for sections; H3 for subsections; never invent sizes. Tighten headings subtly (`tracking-tight`) and keep body open and legible.
-- Icons: Pair icons with labels unless the control is universally understood. Default size 20; inherit color; avoid decorative color unless semantic.
-- Forms: Always include a `Label`; place concise help text directly beneath. Errors are specific, polite, and associated via `aria-invalid` and `aria-describedby`.
-- Motion: Durations 120–180ms for micro‑interactions, ~240ms for entrances; no bounce or overshoot. Prefer color/opacity transitions; transform only when it communicates state.
-- Color: Primary is sparse and purposeful; accent is rare and contextual. Destructive conveys irreversible risk; don’t use for mere warnings.
+Define an opinionated component vocabulary and variants matrix for legal tech applications. Conservative, accessible, hierarchy-first. Complements the Styling Skill by prescribing allowed variants, sizes, compositions, and interaction patterns.
 
 ## Key Files
 
 - `components/ui/*` — Shadcn primitives (auto-generated; do not edit)
 - `components/*` — Custom components (author here)
-- `components.json` — Shadcn configuration (Maia preset)
-
-## Shadcn MCP + CLI (Required)
-
-Shadcn is the default mechanism to add primitives and patterns. Use MCP for in-editor automation and CLI for direct commands.
-
-- Install MCP server in this repo (choose your client):
-  - Claude: `bunx --bun shadcn@latest mcp init --client claude`
-  - Opencode: `bunx --bun shadcn@latest mcp init --client opencode`
-  - Cursor: `bunx --bun shadcn@latest mcp init --client cursor`
-  - Codex: `bunx --bun shadcn@latest mcp init --client codex`
-  - Factory: `bunx --bun shadcn@latest mcp init --client factory`
-
-- Generate primitives:
-  - `bunx --bun shadcn@latest add <component>` (e.g., `button`, `dialog`, `table`)
-
-- Docs:
-  - MCP: https://ui.shadcn.com/docs/mcp
-  - Shadcn: https://ui.shadcn.com/docs
-
-Preferred flow:
-1) Add primitive(s) with Shadcn. 2) Compose in `components/` using tokens. 3) Apply allowed variants/sizes only. 4) Verify with the checklist.
+- `components.json` — Shadcn configuration
 
 ## Authoring Rules
+
 - Import primitives from `@/components/ui/[name]`
 - Compose with `cn()` from `@/lib/utils`
 - Use semantic `variant` and `size` props; avoid boolean style flags
-- Use token classes only (see Styling Skill). No raw colors or numeric palette classes
+- Use token classes only. No raw colors or numeric palettes.
 - Add `'use client'` when using hooks or browser APIs
 - Type all props with explicit interfaces
 
 ## Icons
+
 - Library: Phosphor (`@phosphor-icons/react`)
 - Sizes: 16 (dense), 20 (default), 24 (prominent)
-- Weights: `regular` default; `bold` for active; `duotone` for decorative; `fill` only when required
-- Color: inherit text color; for accents, use token classes (e.g., `text-primary`)
+- Weights: `regular` default; `bold` for active; `duotone` decorative
+- Color: inherit text color; use token classes for accents
 
-## Variants Matrix (Canonical)
+## Variants Matrix
 
 ### Button
-Allowed variants and sizes only:
-- Variants: `default`, `secondary`, `outline`, `ghost`, `destructive`
-- Sizes: `sm`, `md` (default), `lg`
 
-Usage examples:
+| Variant | Use Case | Style |
+|---------|----------|-------|
+| `default` | Primary CTAs, confirmations | Dark bg, light text |
+| `secondary` | Alternative actions | Light bg, dark text |
+| `outline` | Cancel, tertiary actions | Border only |
+| `ghost` | Table actions, subtle | No border, hover bg |
+| `destructive` | Delete, dangerous ops | Red bg |
+
+Sizes: `sm`, `md` (default), `lg`
+
 ```tsx
 <Button>Primary</Button>
 <Button variant="secondary">Secondary</Button>
-<Button variant="outline">Outline</Button>
-<Button variant="ghost">Ghost</Button>
+<Button variant="outline">Cancel</Button>
+<Button variant="ghost">View</Button>
 <Button variant="destructive">Delete</Button>
-<Button size="sm">Small</Button>
-<Button size="lg">Large</Button>
 ```
 
-Style guidance (reference, not implementation):
-- `default`: `bg-primary text-primary-foreground`
-- `secondary`: `bg-secondary text-secondary-foreground`
-- `outline`: `border border-input bg-background`
-- `ghost`: minimal chrome; rely on hover: `hover:bg-accent`
-- `destructive`: `bg-destructive text-destructive-foreground`
-
-States:
-- Loading: add spinner to the left, disable interactions
-- Destructive: always requires confirmation (dialog or second step)
+**Interaction states:**
+- Hover: `hover:scale-[1.02]` with `duration-150`
+- Active: `active:scale-[0.98]` for press feedback
+- Loading: Spinner left, disable interactions
+- Destructive: Always requires confirmation dialog
 
 ### Input / Textarea / Select
+
 - Sizes: `sm`, `md` (default)
 - States: `default`, `invalid`, `disabled`
-- Compose with Label + Help text
+- Always compose with Label + Help text
 
-Usage:
 ```tsx
 <div className="space-y-2">
   <Label htmlFor="email">Email</Label>
   <Input id="email" type="email" />
-  <p className="text-xs text-muted-foreground">We’ll never share your email.</p>
+  <p className="text-xs text-muted-foreground">Help text.</p>
 </div>
 ```
 
-Style guidance:
-- Default: `border-input bg-background`
-- Invalid: add `aria-invalid` and prefer tokenized ring: `ring-2 ring-destructive/30`
-- Disabled: `opacity-50 cursor-not-allowed` (no custom colors)
+**Focus states:**
+- Border darkens: `focus-visible:border-foreground`
+- Subtle ring: `focus-visible:ring-2 focus-visible:ring-foreground/10`
+- Slight scale: `focus:scale-[1.01]`
 
-### Card
-- Variants: `flat` (default border), `elevated` (`shadow-sm`), `ghost` (no border)
-- Composition: `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`
-
-Usage:
+**Invalid state:**
 ```tsx
-<Card className="shadow-sm">
-  <CardHeader>
-    <CardTitle>Card Title</CardTitle>
-    <CardDescription>Optional description</CardDescription>
-  </CardHeader>
-  <CardContent>{/* Content */}</CardContent>
-</Card>
+<Input aria-invalid="true" className="border-destructive" />
+<p className="text-sm text-destructive">Error message.</p>
 ```
 
-### Alert/Dialog
-- Use Shadcn primitives; do not restyle components beyond tokens
-- Danger actions must be `variant="destructive"`
-- Confirm patterns require explicit primary/secondary actions
+### Status Badges
 
-### Badge
-- Variants: `default`, `secondary`, `outline`
-- Sizes: `sm` (default), `md`
-- Colors follow token roles; avoid status‑specific custom colors unless tokens are extended
+| Variant | Use | Style |
+|---------|-----|-------|
+| `default` | Standard labels | Dark bg |
+| `secondary` | Subdued labels | Light bg |
+| `outline` | Minimal emphasis | Border only |
+| `destructive` | Errors, failures | Red bg |
+| Processing | In-progress | Amber + spinner |
+| Completed | Success | Green + check |
+| Failed | Errors | Red + X icon |
+
+```tsx
+<Badge>Default</Badge>
+<Badge variant="outline">Draft</Badge>
+<Badge variant="destructive">Failed</Badge>
+
+{/* Status badges with icons */}
+<Badge className="bg-amber-600 text-white gap-1">
+  <Loader2 className="h-3 w-3 animate-spin" />
+  Processing
+</Badge>
+
+<Badge className="bg-green-700 text-white gap-1">
+  <CheckCircle2 className="h-3 w-3" />
+  Completed
+</Badge>
+```
+
+### Card
+
+**Paper-like rules apply:** No nested cards, no shadows on main content.
+
+- Variants: `flat` (border), `elevated` (`shadow-sm` - use sparingly), `ghost`
+- Use borders and background contrast for elevation
+
+```tsx
+{/* Standard card - border only, no shadow */}
+<div className="rounded-lg border bg-card p-6">
+  <h3 className="text-lg font-semibold">Title</h3>
+  <p className="text-sm text-muted-foreground">Description</p>
+</div>
+
+{/* Card with hover */}
+<div className="rounded-lg border bg-card p-6 hover:border-foreground/20 transition-colors">
+  {/* Content */}
+</div>
+```
+
+### Tables
+
+- Container: `rounded-lg border bg-card overflow-hidden`
+- Row borders: `border-border`
+- Row hover: `hover:bg-muted/50 transition-colors duration-150`
+- No shadows
+
+```tsx
+<div className="rounded-lg border bg-card overflow-hidden">
+  <Table>
+    <TableHeader>
+      <TableRow>
+        <TableHead>Name</TableHead>
+        <TableHead>Status</TableHead>
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      <TableRow className="hover:bg-muted/50 transition-colors">
+        <TableCell className="text-foreground">Document</TableCell>
+        <TableCell className="text-sm text-muted-foreground">Draft</TableCell>
+      </TableRow>
+    </TableBody>
+  </Table>
+</div>
+```
+
+### Dialog/Modal
+
+- Background: `bg-card`
+- Border: `border`
+- No shadows (elevated by z-index and overlay)
+
+```tsx
+<DialogContent className="bg-card border">
+  <DialogHeader>
+    <DialogTitle className="font-semibold">Title</DialogTitle>
+    <DialogDescription className="text-sm text-muted-foreground">
+      Description
+    </DialogDescription>
+  </DialogHeader>
+  {/* Content */}
+  <DialogFooter className="gap-2">
+    <Button variant="outline">Cancel</Button>
+    <Button>Confirm</Button>
+  </DialogFooter>
+</DialogContent>
+```
+
+### Tabs
+
+- Simple bottom border indicator
+- Active: dark text + 2px bottom border
+- Inactive: muted text, darkens on hover
+
+```tsx
+<Tabs>
+  <TabsList className="border-b gap-6">
+    <TabsTrigger 
+      className="text-muted-foreground data-[state=active]:text-foreground 
+                 data-[state=active]:border-b-2 data-[state=active]:border-foreground
+                 hover:text-foreground transition-colors"
+    >
+      Tab 1
+    </TabsTrigger>
+  </TabsList>
+  <TabsContent>...</TabsContent>
+</Tabs>
+```
+
+### Alert
+
+```tsx
+<Alert className="bg-card border">
+  <AlertCircle className="h-4 w-4 text-primary" />
+  <AlertTitle className="font-semibold">Title</AlertTitle>
+  <AlertDescription className="text-sm text-muted-foreground">
+    Description
+  </AlertDescription>
+</Alert>
+```
+
+### Dropdown Menu
+
+```tsx
+<DropdownMenuContent className="bg-card border">
+  <DropdownMenuItem className="focus:bg-muted focus:text-foreground">
+    Action
+  </DropdownMenuItem>
+  <DropdownMenuItem className="text-destructive focus:bg-destructive/10">
+    Delete
+  </DropdownMenuItem>
+</DropdownMenuContent>
+```
 
 ## Canonical Compositions
 
@@ -159,25 +243,12 @@ Usage:
   <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
     <div>
       <h1 className="text-xl md:text-2xl font-semibold">Page Title</h1>
-      <p className="text-sm text-muted-foreground">Optional description</p>
+      <p className="text-sm text-muted-foreground">Description</p>
     </div>
     <div className="flex items-center gap-2">
       <Button variant="outline">Secondary</Button>
       <Button>Primary</Button>
     </div>
-  </div>
-</div>
-```
-
-### Toolbar / Filter Bar
-```tsx
-<div className="flex flex-wrap items-center gap-2">
-  {/* Filters */}
-  <Input className="w-[240px]" placeholder="Search" />
-  <Select>{/* ... */}</Select>
-  <div className="ml-auto flex items-center gap-2">
-    <Button variant="outline">Export</Button>
-    <Button>New</Button>
   </div>
 </div>
 ```
@@ -188,55 +259,74 @@ Usage:
   <header className="flex items-center justify-between">
     <div>
       <h2 className="text-xl font-semibold">Records</h2>
-      <p className="text-sm text-muted-foreground">Manage your data</p>
+      <p className="text-sm text-muted-foreground">Manage data</p>
     </div>
-    <div className="flex items-center gap-2">
-      <Button variant="outline">Import</Button>
-      <Button>New</Button>
-    </div>
+    <Button>New</Button>
   </header>
-  {/* Filter bar */}
   <div className="flex flex-wrap items-center gap-2">
     <Input placeholder="Search" className="w-[240px]" />
-    <Select>{/* ... */}</Select>
+    <Select>{/* filters */}</Select>
   </div>
-  {/* Table */}
-  <div className="rounded-lg border bg-card p-0">
-    {/* table component here */}
+  <div className="rounded-lg border bg-card overflow-hidden">
+    <Table>{/* rows */}</Table>
+  </div>
+</section>
+```
+
+### Section Pattern (Paper-Like)
+```tsx
+<section className="space-y-6">
+  <div>
+    <h2 className="text-2xl font-semibold">Section Title</h2>
+    <p className="text-sm text-muted-foreground mb-6">Description</p>
+  </div>
+  <div className="rounded-lg border bg-card">
+    {/* Flat content, no nested wrappers */}
   </div>
 </section>
 ```
 
 ## Motion & Feedback
-- Durations: 120–180ms (micro), ~240ms (entrances); no bounce/overshoot
-- Prefer `transition-colors` and opacity; use transforms only to communicate state
-- Elevation: border-first; reserve `shadow-sm` for essential separation; avoid heavy shadows
-- Loading: use skeletons (`animate-pulse`) for content areas; spinners for button-level
-- Empty: neutral icon, concise guidance, primary action
-- Errors: tokenized text or alert components; never red text alone without context
+
+### Timing
+- Fast: 150ms (hover, press)
+- Base: 200ms (standard transitions)
+- Slow: 300ms (modals, entrances)
+
+### Patterns
+- **Buttons**: `hover:scale-[1.02] active:scale-[0.98]`
+- **Lists**: Staggered fade-in-up with 50ms delay per item
+- **Cards**: `hover:border-foreground/20`
+- **Loading**: `animate-pulse` for skeletons, spinners for buttons
+- **Empty**: Neutral icon, concise guidance, primary action
+
+### Reduced Motion
+All animations must respect `prefers-reduced-motion: reduce`.
 
 ## Accessibility
-- Ensure `aria-*` states for inputs (`aria-invalid`, `aria-describedby`)
-- Use Label for all form fields; associate via `htmlFor`
-- Keep hit targets ≥ 40px; maintain visible focus (global ring)
-- Verify color contrast when placing text over `accent` or `primary` backgrounds
 
-## Design Review Checklist (Components)
-- Variant and size are from the allowed matrix
-- Colors are token-based; no raw or numeric palette usage
-- Focus states visible; keyboard interactions work
-- Loading/empty/error states follow the shared patterns
-- Composition matches canonical shells where applicable
+- Labels: `<Label htmlFor="...">` for all form fields
+- Errors: `aria-invalid="true"` + `aria-describedby`
+- Hit targets: Min 40×40px
+- Focus: Visible ring on all interactive elements
+- Contrast: WCAG AA (4.5:1 text, 3:1 UI)
 
-## Optional Guardrail (opt-in)
-Add a custom ESLint rule to flag raw color usage in className (example regex):
-```js
-// In eslint.config.mjs (opt-in)
-const RAW_COLOR_CLASS = /(bg|text|border|ring)-(black|white|\d{1,3}|[a-zA-Z]+-\d{2,3})|#([0-9a-fA-F]{3,8})/;
+## Design Review Checklist
+
+```
+- [ ] No nested cards
+- [ ] No shadows on main content
+- [ ] Variants from allowed matrix only
+- [ ] Colors are token-based
+- [ ] Focus states visible
+- [ ] Keyboard interactions work
+- [ ] Loading/empty/error states present
+- [ ] Reduced motion respected
 ```
 
 ## Resources
+
 - Shadcn MCP: https://ui.shadcn.com/docs/mcp
 - Shadcn Docs: https://ui.shadcn.com/docs
-- Phosphor Icons
-- Tailwind CSS
+- Phosphor Icons: https://phosphoricons.com
+- Tailwind CSS: https://tailwindcss.com/docs

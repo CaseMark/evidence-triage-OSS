@@ -4,6 +4,7 @@ description: |
   Agents: Always follow this skill when creating or modifying any UI or styling. 
   Use Shadcn MCP + CLI to scaffold primitives, patterns, and themes; do not hand-roll UI. 
   Prefer tokens, canonical layouts, and the variants matrix over ad-hoc decisions.
+  Enforce paper-like elevation (no nested cards, no shadows, borders for definition).
 ---
 
 # Styling Skill
@@ -15,116 +16,151 @@ description: |
 
 ## Purpose
 
-Provide a shared, opinionated design language to keep apps consistent and avoid “vibe coding.” This document defines the foundations (tokens, type, spacing), canonical layout patterns, and enforcement guidelines for all create-legal-app projects.
+Provide a shared, opinionated design language for legal tech applications. Conservative, accessible, hierarchy-first design that avoids "vibe coding." This document defines foundations (tokens, type, spacing), canonical layouts, and enforcement guidelines.
 
-## Design Principles (Ive Revision)
-- Reduction: Remove the unnecessary until only the essential remains.
-- Clarity: Hierarchy and contrast that are felt before they’re noticed.
-- Material Honesty: Tokens are the material; never fake depth or color.
-- Rhythm: Consistent vertical rhythm and measured line lengths guide reading.
-- Deference: Interface recedes so content and decisions come forward.
-- Poise: Motion is calm, purposeful, and barely there.
-- Care: Accessibility as craft—focus, contrast, and language refined.
+## Design Principles
 
-## Decision Heuristics (Ive Revision)
-- Actions: One primary action per view; prefer secondary/outline for the rest. Ghost is only for inline, low‑emphasis affordances. Destructive requires explicit confirmation; never default‑focused.
-- Composition: Page headers include title, short description, then primary and secondary actions. Keep copy to 60–72ch; avoid more than two font weights per page. Avoid centered body copy; reserve center alignment for simple empty states.
-- Elevation: Prefer 1px borders; avoid shadows unless separation is essential. Use `shadow-sm` sparingly; overlays rely on subtle borders and backdrops.
-- Density: Cozy by default; compact at container scope (`text-sm`, `gap-2/3`, `p-2/3`). Never reduce interactive hit targets below 40px.
-- Typography: H1 is unique per page; H2 for sections; H3 for subsections; never invent sizes. Tighten headings subtly (`tracking-tight`) and keep body open and legible.
-- Icons: Pair icons with labels unless the control is universally understood. Default size 20; inherit color; avoid decorative color unless semantic.
-- Forms: Always include a `Label`; place concise help text directly beneath. Errors are specific, polite, and associated via `aria-invalid` and `aria-describedby`.
-- Motion: Durations 120–180ms for micro‑interactions, ~240ms for entrances; no bounce or overshoot. Prefer color/opacity transitions; transform only when it communicates state.
-- Color: Primary is sparse and purposeful; accent is rare and contextual. Destructive conveys irreversible risk; don’t use for mere warnings.
+1. **Conservative**: Professional, trustworthy, appropriate for legal contexts
+2. **Accessible**: WCAG AA compliant, clear contrast, readable typography
+3. **Hierarchy-First**: Clear visual hierarchy guides user attention
+4. **Consistent**: Predictable patterns and reusable components
+5. **Paper-Like Elevation**: Elements closer to user have prominence via contrast, not shadows
+
+### Paper-Like Design Rules
+
+- **No boxes in boxes**: Avoid nested card structures
+- **Minimal shadows**: Remove shadows from main content; use borders and background colors
+- **Prominence through contrast**: Elements closer to user use lighter backgrounds (`bg-card`) on warm background (`bg-background`)
+- **Borders for definition**: Use warm borders to define sections instead of shadows
+
+## Decision Heuristics
+
+- **Actions**: One primary action per view; secondary/outline for rest. Ghost for inline only. Destructive requires confirmation.
+- **Composition**: Page headers include title, description, then actions. Keep copy to 60–72ch. Avoid centered body copy.
+- **Elevation**: Prefer 1px borders; avoid shadows unless essential. Use `shadow-sm` sparingly.
+- **Density**: Cozy by default; compact for data-dense (`text-sm`, `gap-2/3`). Never reduce hit targets below 40px.
+- **Typography**: H1 unique per page; H2 sections; H3 subsections. Never invent sizes.
+- **Icons**: Pair with labels unless universal. Size 20 default; inherit color.
+- **Forms**: Always include Label; help text beneath. Errors via `aria-invalid` and `aria-describedby`.
+- **Motion**: 150ms fast, 200ms base, 300ms slow. No bounce/overshoot. Prefer color/opacity transitions.
+- **Color**: Primary sparse; accent rare. Destructive = irreversible risk only.
 
 ## Scope & Key Files
 
-- `app/globals.css` — Tailwind v4 imports, inline theme tokens and roles
-- `app/layout.tsx` — Font loading (Inter, JetBrains Mono, Spectral for headings)
-- `components.json` — Shadcn theme configuration (Maia preset)
+- `app/globals.css` — Tailwind v4 imports, inline theme tokens
+- `app/layout.tsx` — Font loading (Geist Sans primary)
+- `components.json` — Shadcn theme configuration
 
-Notes:
-- Tailwind v4 is used. There is no `tailwind.config.ts`. Tokens and roles are mapped via `@theme inline` in `app/globals.css`.
-- Colors are defined in OKLCH. Always reference tokens via Tailwind classes, never raw values.
+## Color System
 
-## Shadcn MCP + CLI (Required)
+### CSS Variables (HSL)
+```css
+--background: 40 6% 96%;        /* #f6f6f5 - warm light */
+--foreground: 25 8% 12%;        /* #1f1d1b - warm dark */
+--card: 0 0% 100%;              /* #ffffff - white */
+--card-foreground: 25 8% 12%;
+--muted: 40 4% 92%;
+--muted-foreground: 30 6% 42%;  /* #6b6560 - warm gray */
+--border: 35 12% 86%;           /* #ddd8d3 - warm border */
+--input: 35 12% 86%;
+--ring: 210 54% 40%;
+--primary: 210 54% 40%;         /* #2f5f9e - professional blue */
+--primary-foreground: 0 0% 100%;
+--destructive: 0 50% 50%;       /* #b84a4a - red */
+--radius: 6px;
+```
 
-Shadcn is the primary way to add/modify UI primitives. Use MCP for in-editor automation and the CLI for direct commands.
+### Semantic Token Classes (Required)
+Use only these. Never raw hex, rgb, or numeric palettes.
 
-- Install MCP server in this repo (choose your client):
-  - Claude: `bunx --bun shadcn@latest mcp init --client claude`
-  - Opencode: `bunx --bun shadcn@latest mcp init --client opencode`
-  - Cursor: `bunx --bun shadcn@latest mcp init --client cursor`
-  - Codex: `bunx --bun shadcn@latest mcp init --client codex`
-  - Factory: `bunx --bun shadcn@latest mcp init --client factory`
+```
+Surfaces:  bg-background, bg-card, bg-muted, bg-popover
+Text:      text-foreground, text-muted-foreground, text-primary-foreground
+Actions:   bg-primary, bg-secondary, bg-accent, bg-destructive
+Chrome:    border, ring, input
+```
 
-- Use CLI to manage components and theme:
-  - Add component: `bunx --bun shadcn@latest add <component>` (e.g., `button`, `dialog`, `table`)
-  - Update theme preset or sync: see docs and `components.json`
+### Status Colors
+| Status | Color | Use |
+|--------|-------|-----|
+| Danger | Red (`destructive`) | Errors, delete actions |
+| Warning | Amber | Processing, warnings |
+| Success | Green | Completed states |
 
-- Docs:
-  - MCP: https://ui.shadcn.com/docs/mcp
-  - Shadcn: https://ui.shadcn.com/docs
+## Typography
 
-Preferred flow:
-1) Generate primitives via Shadcn (MCP or CLI). 2) Compose in custom components. 3) Style via tokens only. 4) Verify against checklists below.
+| Role | Classes |
+|------|---------|
+| Page Title | `text-3xl font-semibold` |
+| Section | `text-2xl font-semibold` |
+| Card Title | `text-lg font-semibold` |
+| Body | `text-base text-foreground` |
+| Muted | `text-sm text-muted-foreground` |
+| Caption | `text-xs text-muted-foreground` |
 
-## Foundations
+Text emphasis: High (`text-foreground`), Medium (`text-foreground/80`), Low (`text-muted-foreground`)
 
-### Fonts
-- Body: Inter (`--font-sans`) via `app/layout.tsx` and applied in `app/globals.css`.
-- Code: JetBrains Mono (`--font-mono`).
-- Headings: Spectral (loaded in `app/layout.tsx`, applied to `h1–h6` in `app/globals.css`).
+## Spacing Scale
 
-### Color Tokens & Roles
-Use only semantic token classes. Do not use raw hex, rgb, OKLCH values, or Tailwind numeric palettes (e.g., `-500`).
-- Surfaces: `bg-background`, `bg-card`, `bg-popover`
-- Text: `text-foreground`, `text-muted-foreground`, `text-accent-foreground`, `text-primary-foreground`, `text-secondary-foreground`, `text-destructive-foreground`
-- Actions: `bg-primary`, `bg-secondary`, `bg-accent`, `bg-destructive`
-- Chrome: `border`, `ring`, `input`
-- Sidebar (when present): `bg-[sidebar]` tokens are available
+| Token | Size | Use |
+|-------|------|-----|
+| `gap-2` | 8px | Tight (icon+text, label+input) |
+| `gap-4` | 16px | Standard |
+| `gap-6` | 24px | Section spacing, card grids |
+| `gap-8` | 32px | Major sections |
+| `gap-12` | 48px | Large section spacing |
 
-Dark mode: Tokens adapt automatically via `.dark` variables defined in `app/globals.css`. Prefer tokens over `dark:` prefixes. A custom `@custom-variant dark` exists for advanced cases—use sparingly and only when tokens cannot express the intent.
+**Page container**: `container mx-auto px-8 py-12 max-w-7xl`
+**Page gutters**: `px-4` (mobile), `md:px-6`
 
-### Type Scale & Roles
-Use semantic roles with concrete classes. Do not ad‑hoc type sizes.
-- Display (rare): `text-5xl font-semibold tracking-tight`
-- H1 (page title): `text-3xl md:text-4xl font-bold`
-- H2 (section): `text-2xl md:text-3xl font-semibold`
-- H3 (subsection): `text-xl md:text-2xl font-semibold`
-- H4 (minor heading): `text-lg font-medium`
-- Body: `text-base text-foreground`
-- Muted: `text-sm text-muted-foreground`
-- Caption/Meta: `text-xs text-muted-foreground`
+## Border Radius
 
-Text emphasis levels:
-- High: `text-foreground`
-- Medium: `text-foreground/80`
-- Low: `text-muted-foreground`
+- Small: `4px` (badges)
+- Default: `6px` (buttons, inputs, cards)
+- Medium: `8px` (larger elements)
 
-### Spacing & Density
-Default density is “cozy.” Use this scale and avoid arbitrary values.
-- Gaps: `gap-2` (tight), `gap-3`, `gap-4` (default), `gap-6` (roomy)
-- Padding: `p-2`, `p-3`, `p-4` (default), `p-6`
-- Page gutters: `px-4` (mobile), `md:px-6`
+## Motion & Animation
 
-Density modes:
-- Cozy (default): body `text-base`, components `gap-4`, `p-4`
-- Compact (data-dense UIs): wrapper `text-sm`, prefer `gap-2–3`, `p-2–3`
+### Timing
+| Type | Duration | Use |
+|------|----------|-----|
+| Fast | 150ms | Hover, button press |
+| Base | 200ms | Standard transitions |
+| Slow | 300ms | Modals, page transitions |
 
-### Layout & Containers
-- Content container: `container mx-auto px-4 md:px-6`
-- Max widths: prefer fluid; for prose or narrow flows use `max-w-2xl`/`max-w-3xl`
-- Breakpoints: `sm 640`, `md 768`, `lg 1024`, `xl 1280`, `2xl 1536`
+**Easing**: `cubic-bezier(0.4, 0, 0.2, 1)` - smooth, professional
 
-### Foundational Notes
-- Baseline rhythm: align spacing and line-height to a 4px baseline where practical.
-- Line length: constrain long-form content to `max-w-prose` or `max-w-3xl`.
-- Radii: use the single radius system; avoid mixing corner treatments.
-- Focus: rely on the global tokenized ring; avoid per-component outlines.
-- Shadows: border-first; reserve `shadow-sm` for essential separation only.
+### Patterns
+- **Buttons**: `hover:scale-[1.02] active:scale-[0.98]` with `duration-150`
+- **Lists**: Staggered `fade-in-up` with 50ms delay per item
+- **Cards**: `hover:border-foreground/20` transition
+- **Forms**: `focus:scale-[1.01]` for inputs
+- **Loading**: `animate-pulse` for skeletons
+
+### Reduced Motion (Required)
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
 
 ## Canonical Page Patterns
+
+### Section Structure (Paper-Like)
+```tsx
+<section className="space-y-6">
+  <div>
+    <h2 className="text-2xl font-semibold">Section Title</h2>
+    <p className="text-sm text-muted-foreground mb-6">Description</p>
+  </div>
+  <div className="rounded-lg border bg-card">
+    {/* Flat content, no nested cards */}
+  </div>
+</section>
+```
 
 ### Page Header
 ```tsx
@@ -132,7 +168,7 @@ Density modes:
   <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
     <div>
       <h1 className="text-xl md:text-2xl font-semibold">Page Title</h1>
-      <p className="text-sm text-muted-foreground">Optional description</p>
+      <p className="text-sm text-muted-foreground">Description</p>
     </div>
     <div className="flex items-center gap-2">
       <Button variant="outline">Secondary</Button>
@@ -150,11 +186,12 @@ Density modes:
 </div>
 ```
 
-### Card List
+### Card Grid (No Nesting)
 ```tsx
 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-  <Card className="shadow-sm" />
-  <Card className="shadow-sm" />
+  <div className="rounded-lg border bg-card p-6">
+    {/* Content directly, no Card wrapper if already in grid */}
+  </div>
 </div>
 ```
 
@@ -164,7 +201,7 @@ Density modes:
   <div className="space-y-2">
     <Label htmlFor="email">Email</Label>
     <Input id="email" type="email" />
-    <p className="text-xs text-muted-foreground">We’ll never share your email.</p>
+    <p className="text-xs text-muted-foreground">Help text.</p>
   </div>
   <div className="flex gap-2">
     <Button type="submit">Save</Button>
@@ -173,56 +210,59 @@ Density modes:
 </form>
 ```
 
-## Component Styling Rules
-- Always compose with `cn()` from `@/lib/utils`.
-- Prefer semantic variants to boolean flags (e.g., `variant="secondary"` over `secondary={true}`).
-- For borders: `border` with `border-border`. Avoid custom colors.
-- For focus: rely on global `outline-ring/50` styles; don’t override unless necessary.
-
-## Motion & Elevation
-- Durations: 120–180ms (micro), ~240ms (entrances)
-- Easing: `ease-out` for entrances, `ease-in` for exits, `ease-in-out` for micro‑interactions; no bounce/overshoot
-- Defaults: `transition-colors` on interactive elements; use transforms only when communicating state
-- Elevation: border-first; reserve `shadow-sm` for essential separation. Avoid heavier shadows.
-
 ## Accessibility & States
-- Focus visible: ensure all interactive elements have visible focus; rely on tokens `ring`
-- Contrast: aim for WCAG AA (tokens are tuned, but verify when layering)
-- Hit targets: min 40×40px for buttons and touch targets
-- State patterns: use consistent empty, loading, and error treatments
+
+- **Focus**: Visible ring on all interactive elements (`ring-2 ring-foreground/10`)
+- **Contrast**: WCAG AA minimum (4.5:1 text, 3:1 UI)
+- **Hit targets**: Min 40×40px
+- **Motion**: Respect `prefers-reduced-motion`
+
+### State Patterns
 ```tsx
 // Skeleton
 <div className="h-6 w-48 animate-pulse rounded bg-muted" />
 
 // Inline error
-<p className="text-sm text-destructive-foreground">Something went wrong.</p>
+<p className="text-sm text-destructive">Error message.</p>
+
+// Empty state
+<div className="text-center py-12">
+  <Icon className="mx-auto h-12 w-12 text-muted-foreground" />
+  <p className="mt-4 text-muted-foreground">No items found.</p>
+  <Button className="mt-4">Add Item</Button>
+</div>
 ```
 
-## Do / Don’t
-- Do use token classes (`bg-primary`, `text-muted-foreground`, `border`)
-- Do keep spacing to the shared scale
-- Don’t use raw colors (`#fff`, `bg-black`, `bg-primary-500`)
-- Don’t rely on `dark:` when tokens suffice
-- Don’t use negative margins for layout; adjust structure instead
+## Do / Don't
+
+**Do:**
+- Use token classes (`bg-primary`, `text-muted-foreground`, `border`)
+- Keep spacing to the shared scale
+- Use borders for elevation, not shadows
+- Respect reduced motion preferences
+
+**Don't:**
+- Use raw colors (`#fff`, `bg-black`, `bg-primary-500`)
+- Nest cards inside cards
+- Add shadows to main content
+- Use `dark:` when tokens suffice
+- Use negative margins for layout
 
 ## Design Review Checklist
-- Uses only token-based colors and roles
-- Typography matches role (H1–H4, body, caption) and density
-- Spacing uses shared scale; gutters are correct; rhythm feels consistent
-- Focus states visible; controls meet hit target guidance
-- Dark mode verified; no color hard-coding
-- Variants align with the component matrix (see UI Components Skill)
 
-## Optional Guardrail (opt-in)
-Add a custom ESLint rule to flag raw color usage in className (example regex):
-```js
-// In eslint.config.mjs (opt-in)
-const RAW_COLOR_CLASS = /(bg|text|border|ring)-(black|white|\d{1,3}|[a-zA-Z]+-\d{2,3})|#([0-9a-fA-F]{3,8})/;
+```
+- [ ] No nested cards (paper-like elevation)
+- [ ] No shadows on main content
+- [ ] Colors use tokens only
+- [ ] Typography matches scale
+- [ ] Spacing uses defined scale
+- [ ] Focus states visible
+- [ ] Reduced motion respected
+- [ ] Dark mode works via tokens
 ```
 
 ## Resources
+
 - Tailwind CSS v4
-- Shadcn UI Theming (Maia)
+- Shadcn UI: https://ui.shadcn.com/docs
 - Shadcn MCP: https://ui.shadcn.com/docs/mcp
-- Shadcn Docs: https://ui.shadcn.com/docs
-- CSS Custom Properties (MDN)
