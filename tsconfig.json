@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "lib/auth/templates"]
+  "exclude": ["node_modules", "lib/auth/templates", "temp_repos"]
 }

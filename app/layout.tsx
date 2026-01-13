@@ -14,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Create Legal App",
-  description: "The foundation is set. Now connect the dots.",
+  title: "Evidence Triage - AI-Powered Legal Document Classification",
+  description: "Upload, classify, and organize legal evidence with AI-powered document classification. Supports 10 evidence categories with automatic tagging and relevance scoring.",
 };
 
 export default function RootLayout({
