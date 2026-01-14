@@ -185,8 +185,8 @@ export async function POST(request: NextRequest) {
     console.log(`[Extract] Extracted ${extractedText.length} characters from ${file.name}`);
 
     // Calculate cost based on character count
-    // Using $0.30 per 1000 characters as estimate for OCR processing
-    const costPerThousandChars = 0.30;
+    // LLM inference pricing: $0.0005 per 1000 characters
+    const costPerThousandChars = 0.0005;
     const charCount = extractedText.length;
     const cost = (charCount / 1000) * costPerThousandChars;
 
