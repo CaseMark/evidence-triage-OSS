@@ -274,6 +274,11 @@ export function incrementDocumentsUploaded(): void {
   updateSessionStats({ documentsUploaded: stats.documentsUploaded + 1 });
 }
 
+export function decrementDocumentsUploaded(): void {
+  const stats = getSessionStats();
+  updateSessionStats({ documentsUploaded: Math.max(0, stats.documentsUploaded - 1) });
+}
+
 export function incrementClassificationsUsed(): void {
   const stats = getSessionStats();
   updateSessionStats({ classificationsUsed: stats.classificationsUsed + 1 });
@@ -359,4 +364,98 @@ export function calculateTimeRemaining(resetAt: string): string {
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
   return `${hours}h ${minutes}m`;
+}
+
+// Cosine similarity between two vectors
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+  if (magnitude === 0) return 0;
+
+  return dotProduct / magnitude;
+}
+
+// Semantic search using embeddings (RAG search)
+export function semanticSearch(
+  queryEmbedding: number[],
+  minScore: number = 0.3
+): { item: EvidenceItem; score: number }[] {
+  const items = getAllEvidence();
+  const results: { item: EvidenceItem; score: number }[] = [];
+
+  items.forEach(item => {
+    if (!item.embedding || item.embedding.length === 0) return;
+
+    const similarity = cosineSimilarity(queryEmbedding, item.embedding);
+
+    // Convert similarity (0-1) to percentage score (0-100)
+    const score = Math.round(similarity * 100);
+
+    if (similarity >= minScore) {
+      results.push({ item, score });
+    }
+  });
+
+  // Sort by score descending
+  results.sort((a, b) => b.score - a.score);
+
+  return results;
+}
+
+// Hybrid search: combines keyword and semantic search
+export function hybridSearch(
+  query: string,
+  queryEmbedding?: number[],
+  keywordWeight: number = 0.3,
+  semanticWeight: number = 0.7
+): { item: EvidenceItem; score: number }[] {
+  const keywordResults = searchEvidence(query);
+  const semanticResults = queryEmbedding
+    ? semanticSearch(queryEmbedding, 0.2)
+    : [];
+
+  // Create a map to combine scores
+  const scoreMap = new Map<string, { item: EvidenceItem; keywordScore: number; semanticScore: number }>();
+
+  // Add keyword results
+  keywordResults.forEach(({ item, score }) => {
+    scoreMap.set(item.id, { item, keywordScore: score, semanticScore: 0 });
+  });
+
+  // Add/merge semantic results
+  semanticResults.forEach(({ item, score }) => {
+    const existing = scoreMap.get(item.id);
+    if (existing) {
+      existing.semanticScore = score;
+    } else {
+      scoreMap.set(item.id, { item, keywordScore: 0, semanticScore: score });
+    }
+  });
+
+  // Calculate combined scores
+  const results: { item: EvidenceItem; score: number }[] = [];
+  scoreMap.forEach(({ item, keywordScore, semanticScore }) => {
+    const combinedScore = Math.round(
+      keywordScore * keywordWeight + semanticScore * semanticWeight
+    );
+    if (combinedScore > 0) {
+      results.push({ item, score: combinedScore });
+    }
+  });
+
+  // Sort by combined score descending
+  results.sort((a, b) => b.score - a.score);
+
+  return results;
 }

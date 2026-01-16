@@ -42,27 +42,32 @@ export const UPGRADE_MESSAGES = {
   documentLimit: {
     title: 'Document Limit Reached',
     description: 'You\'ve reached the demo document limit. Delete some documents to upload more, or upgrade for unlimited storage.',
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade',
+    ctaUrl: 'https://case.dev',
   },
   storageLimit: {
     title: 'Storage Limit Reached',
     description: 'You\'ve reached the demo storage limit. Upgrade to unlock more storage.',
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade',
+    ctaUrl: 'https://case.dev',
   },
   priceLimit: {
     title: 'Session Limit Reached',
     description: 'You\'ve reached the demo session price limit. Upgrade for unlimited processing.',
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade',
+    ctaUrl: 'https://case.dev',
   },
   fileTooLarge: {
     title: 'File Too Large',
     description: `Files must be under ${(DEMO_LIMITS.maxFileSizeBytes / (1024 * 1024)).toFixed(0)}MB. Upgrade to process larger files.`,
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade',
+    ctaUrl: 'https://case.dev',
   },
   unsupportedType: {
     title: 'Unsupported File Type',
     description: `This demo supports: ${LIMIT_DESCRIPTIONS.supportedTypes}`,
-    cta: 'See Pro Features',
+    cta: 'Learn More',
+    ctaUrl: 'https://case.dev',
   },
 };
 

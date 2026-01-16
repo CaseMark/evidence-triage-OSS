@@ -56,6 +56,8 @@ export interface EvidenceItem {
   thumbnailDataUrl?: string;
   // For text content
   textContent?: string;
+  // Embedding vector for RAG search
+  embedding?: number[];
 }
 
 // Upload progress tracking
