@@ -453,6 +453,7 @@ export default function EvidenceTriagePage() {
       deleteEvidence(evidenceId);
       decrementDocumentsUploaded();
       loadEvidence();
+      setSessionStats(getSessionStats());
 
       if (viewingEvidence?.id === evidenceId) {
         setViewingEvidence(null);
