@@ -563,9 +563,14 @@ export default function EvidenceTriagePage() {
             >
               Go Back
             </button>
-            <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+            <a
+              href={warning.ctaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
               {warning.cta}
-            </button>
+            </a>
           </div>
         </div>
       </div>

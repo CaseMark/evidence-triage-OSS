@@ -53,17 +53,20 @@ export const UPGRADE_MESSAGES = {
   priceLimit: {
     title: 'Session Limit Reached',
     description: `You've reached the $${DEMO_LIMITS.pricing.sessionPriceLimit.toFixed(2)} demo session limit. Upgrade to unlock unlimited processing.`,
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade',
+    ctaUrl: 'https://case.dev',
   },
   documentLimit: {
     title: 'Document Limit Reached',
     description: 'You\'ve reached the demo document processing limit. Upgrade for unlimited document processing.',
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade',
+    ctaUrl: 'https://case.dev',
   },
   fileTooLarge: {
     title: 'File Too Large',
     description: `Files must be under ${(DEMO_LIMITS.documents.maxFileSize / (1024 * 1024)).toFixed(0)}MB. Upgrade to process larger files.`,
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade',
+    ctaUrl: 'https://case.dev',
   },
 };
 
