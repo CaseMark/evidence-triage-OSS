@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { put, del } from '@vercel/blob';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -9,12 +10,23 @@ function getApiKey(): string | undefined {
   return process.env.CASE_API_KEY;
 }
 
-// Process OCR for images
-async function processOCR(apiKey: string, imageBase64: string, contentType: string): Promise<string> {
-  // Convert base64 to buffer and upload
-  const buffer = Buffer.from(imageBase64, 'base64');
+// OCR Client following the skill patterns
+interface OCRSubmitResponse {
+  jobId: string;
+  status: string;
+  statusUrl: string;
+  textUrl: string;
+}
 
-  // Create a temporary upload URL and process
+interface OCRStatusResponse {
+  jobId: string;
+  status: string;
+  text?: string;
+  pageCount?: number;
+  error?: string;
+}
+
+async function submitOCR(apiKey: string, documentUrl: string, fileName: string): Promise<OCRSubmitResponse> {
   const response = await fetch(`${API_BASE_URL}/ocr/v1/process`, {
     method: 'POST',
     headers: {
@@ -22,17 +34,140 @@ async function processOCR(apiKey: string, imageBase64: string, contentType: stri
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      image_base64: imageBase64,
-      content_type: contentType,
+      document_url: documentUrl,
+      file_name: fileName,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`OCR API error: ${response.status}`);
+    const error = await response.text();
+    throw new Error(`OCR submit failed: ${response.status} - ${error}`);
   }
 
-  const data = await response.json();
-  return data.text || '';
+  const result = await response.json();
+
+  // Handle different response formats
+  const jobId = result.id || result.jobId || result.job_id;
+  const status = result.status || 'queued';
+
+  if (!jobId) {
+    throw new Error('OCR API did not return a job ID');
+  }
+
+  // CRITICAL: Construct our own URLs using public API base (don't use URLs from response)
+  const statusUrl = `${API_BASE_URL}/ocr/v1/${jobId}`;
+  const textUrl = `${API_BASE_URL}/ocr/v1/${jobId}/download/json`;
+
+  console.log(`[OCR] Job submitted: ${jobId}, status: ${status}`);
+
+  return {
+    jobId,
+    status,
+    statusUrl,
+    textUrl,
+  };
+}
+
+async function getOCRStatus(apiKey: string, statusUrl: string, textUrl: string): Promise<OCRStatusResponse> {
+  const response = await fetch(statusUrl, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OCR status check failed: ${response.status} - ${error}`);
+  }
+
+  const result = await response.json();
+  const jobId = result.id || result.jobId || result.job_id;
+  const status = result.status || 'processing';
+
+  // Fetch extracted text when completed
+  let text: string | undefined;
+  if (status === 'completed') {
+    text = await fetchExtractedText(apiKey, textUrl);
+  }
+
+  return {
+    jobId,
+    status,
+    text: text || result.text || result.extracted_text,
+    pageCount: result.pageCount || result.page_count,
+    error: result.error,
+  };
+}
+
+async function fetchExtractedText(apiKey: string, textUrl: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(textUrl, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error('[OCR] Result fetch failed:', response.status);
+      return undefined;
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      const jsonResult = await response.json();
+
+      // Try common field patterns
+      let text = jsonResult.text || jsonResult.extracted_text || jsonResult.content;
+
+      // Concatenate pages if present
+      if (!text && jsonResult.pages && Array.isArray(jsonResult.pages)) {
+        text = jsonResult.pages
+          .map((page: { text?: string; content?: string }) => page.text || page.content || '')
+          .join('\n\n');
+      }
+
+      return text;
+    }
+
+    // Plain text response
+    return await response.text();
+  } catch (e) {
+    console.error('[OCR] Failed to fetch result:', e);
+    return undefined;
+  }
+}
+
+async function pollOCRUntilComplete(
+  apiKey: string,
+  statusUrl: string,
+  textUrl: string,
+  maxAttempts = 60,
+  pollInterval = 3000
+): Promise<string> {
+  let attempts = 0;
+
+  while (attempts < maxAttempts) {
+    const status = await getOCRStatus(apiKey, statusUrl, textUrl);
+
+    console.log(`[OCR] Poll attempt ${attempts + 1}: status=${status.status}`);
+
+    if (status.status === 'completed') {
+      if (!status.text) {
+        throw new Error('OCR completed but no text returned');
+      }
+      return status.text;
+    }
+
+    if (status.status === 'failed') {
+      throw new Error(`OCR failed: ${status.error || 'Unknown error'}`);
+    }
+
+    attempts++;
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+
+  throw new Error('OCR job timed out');
 }
 
 export async function POST(request: NextRequest) {
@@ -44,6 +179,9 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Check for Vercel Blob token
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
   try {
     const formData = await request.formData();
@@ -63,132 +201,76 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Handle different file types
+    // Handle plain text files directly
     if (contentType === 'text/plain') {
-      // Plain text file - decode directly
       extractedText = buffer.toString('utf-8');
-    } else if (contentType === 'application/pdf') {
-      // PDF - use OCR API for text extraction
-      const base64 = buffer.toString('base64');
+    } else if (contentType === 'application/pdf' || contentType.startsWith('image/')) {
+      // PDF or Image - use OCR API
+
+      let documentUrl: string;
+      let blobUrl: string | undefined;
+
+      // If we have a Blob token, upload to Vercel Blob for reliable public URL
+      if (blobToken) {
+        try {
+          const blob = await put(`ocr/${Date.now()}-${file.name}`, file, {
+            access: 'public',
+            token: blobToken,
+          });
+          documentUrl = blob.url;
+          blobUrl = blob.url;
+          console.log(`[Extract] Uploaded to Vercel Blob: ${documentUrl}`);
+        } catch (blobError) {
+          console.error('[Extract] Blob upload failed:', blobError);
+          // Fall back to data URL
+          const base64 = buffer.toString('base64');
+          documentUrl = `data:${contentType};base64,${base64}`;
+          console.log('[Extract] Using data URL fallback');
+        }
+      } else {
+        // No Blob token, use data URL
+        const base64 = buffer.toString('base64');
+        documentUrl = `data:${contentType};base64,${base64}`;
+        console.log('[Extract] Using data URL (no BLOB_READ_WRITE_TOKEN)');
+      }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/ocr/v1/jobs`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            document_base64: base64,
-            content_type: contentType,
-            filename: file.name,
-          }),
-        });
+        // Submit OCR job
+        const ocrJob = await submitOCR(apiKey, documentUrl, file.name);
 
-        if (response.ok) {
-          const job = await response.json();
+        // Poll for completion
+        extractedText = await pollOCRUntilComplete(
+          apiKey,
+          ocrJob.statusUrl,
+          ocrJob.textUrl,
+          60,  // max attempts
+          3000 // poll every 3 seconds
+        );
 
-          // Poll for completion
-          let attempts = 0;
-          const maxAttempts = 30;
-
-          while (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            const statusResponse = await fetch(`${API_BASE_URL}/ocr/v1/jobs/${job.id}`, {
-              headers: { 'Authorization': `Bearer ${apiKey}` },
-            });
-
-            if (statusResponse.ok) {
-              const status = await statusResponse.json();
-
-              if (status.status === 'completed') {
-                // Get the extracted text
-                const textResponse = await fetch(status.links.text, {
-                  headers: { 'Authorization': `Bearer ${apiKey}` },
-                });
-
-                if (textResponse.ok) {
-                  extractedText = await textResponse.text();
-                }
-                break;
-              } else if (status.status === 'failed') {
-                console.error('[Extract] OCR job failed');
-                break;
-              }
-            }
-
-            attempts++;
-          }
-        }
+        console.log(`[Extract] OCR completed: ${extractedText.length} characters`);
       } catch (ocrError) {
         console.error('[Extract] OCR failed:', ocrError);
-      }
-    } else if (contentType.startsWith('image/')) {
-      // Image - use OCR API
-      const base64 = buffer.toString('base64');
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/ocr/v1/jobs`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            document_base64: base64,
-            content_type: contentType,
-            filename: file.name,
-          }),
-        });
-
-        if (response.ok) {
-          const job = await response.json();
-
-          // Poll for completion
-          let attempts = 0;
-          const maxAttempts = 30;
-
-          while (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            const statusResponse = await fetch(`${API_BASE_URL}/ocr/v1/jobs/${job.id}`, {
-              headers: { 'Authorization': `Bearer ${apiKey}` },
-            });
-
-            if (statusResponse.ok) {
-              const status = await statusResponse.json();
-
-              if (status.status === 'completed') {
-                const textResponse = await fetch(status.links.text, {
-                  headers: { 'Authorization': `Bearer ${apiKey}` },
-                });
-
-                if (textResponse.ok) {
-                  extractedText = await textResponse.text();
-                }
-                break;
-              } else if (status.status === 'failed') {
-                console.error('[Extract] OCR job failed');
-                break;
-              }
-            }
-
-            attempts++;
+        // OCR failed, but we continue with empty text
+      } finally {
+        // Clean up uploaded blob if we created one
+        if (blobUrl && blobToken) {
+          try {
+            await del(blobUrl, { token: blobToken });
+            console.log('[Extract] Cleaned up blob');
+          } catch {
+            // Ignore cleanup errors
           }
         }
-      } catch (ocrError) {
-        console.error('[Extract] Image OCR failed:', ocrError);
       }
     }
 
     console.log(`[Extract] Extracted ${extractedText.length} characters from ${file.name}`);
 
-    // Calculate cost based on character count
-    // LLM inference pricing: $0.0005 per 1000 characters
-    const costPerThousandChars = 0.0005;
-    const charCount = extractedText.length;
-    const cost = (charCount / 1000) * costPerThousandChars;
+    // Calculate cost based on OCR processing
+    // OCR pricing estimate: $0.001 per page (rough estimate)
+    const costPerPage = 0.001;
+    const estimatedPages = Math.max(1, Math.ceil(file.size / 50000)); // ~50KB per page estimate
+    const cost = estimatedPages * costPerPage;
 
     return NextResponse.json({
       success: true,
@@ -196,8 +278,8 @@ export async function POST(request: NextRequest) {
       filename: file.name,
       contentType: file.type,
       sizeBytes: file.size,
-      cost: cost, // Cost in dollars
-      charsProcessed: charCount,
+      cost: cost,
+      charsProcessed: extractedText.length,
     });
   } catch (error) {
     console.error('[Extract] Error:', error);
