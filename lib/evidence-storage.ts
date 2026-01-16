@@ -274,6 +274,11 @@ export function incrementDocumentsUploaded(): void {
   updateSessionStats({ documentsUploaded: stats.documentsUploaded + 1 });
 }
 
+export function decrementDocumentsUploaded(): void {
+  const stats = getSessionStats();
+  updateSessionStats({ documentsUploaded: Math.max(0, stats.documentsUploaded - 1) });
+}
+
 export function incrementClassificationsUsed(): void {
   const stats = getSessionStats();
   updateSessionStats({ classificationsUsed: stats.classificationsUsed + 1 });

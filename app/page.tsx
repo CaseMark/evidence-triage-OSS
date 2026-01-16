@@ -44,6 +44,7 @@ import {
   getCategoryCounts,
   getSessionStats,
   incrementDocumentsUploaded,
+  decrementDocumentsUploaded,
   incrementClassificationsUsed,
   incrementSessionPrice,
   calculateStorageUsed,
@@ -450,6 +451,7 @@ export default function EvidenceTriagePage() {
 
     try {
       deleteEvidence(evidenceId);
+      decrementDocumentsUploaded();
       loadEvidence();
 
       if (viewingEvidence?.id === evidenceId) {
