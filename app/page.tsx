@@ -736,7 +736,7 @@ export default function EvidenceTriagePage() {
               <span className="font-semibold">case.dev</span>
             </a>
             <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-              {evidence.length}/{CONFIG_LIMITS.documents.maxDocumentsPerSession} docs
+              {sessionStats.documentsUploaded}/{CONFIG_LIMITS.documents.maxDocumentsPerSession} docs
             </div>
           </div>
 
