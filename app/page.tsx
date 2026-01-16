@@ -50,6 +50,7 @@ import {
   generateId,
   formatFileSize,
   searchEvidence,
+  hybridSearch,
   calculateTimeRemaining,
 } from '@/lib/evidence-storage';
 import {
@@ -349,6 +350,28 @@ export default function EvidenceTriagePage() {
           updateEvidence(evidenceId, { status: 'completed' });
         }
 
+        // Generate embeddings for RAG search (async, don't block)
+        if (extractedText) {
+          try {
+            const embeddingResponse = await fetch('/api/embeddings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: extractedText }),
+            });
+
+            if (embeddingResponse.ok) {
+              const embeddingResult = await embeddingResponse.json();
+              if (embeddingResult.embedding) {
+                updateEvidence(evidenceId, { embedding: embeddingResult.embedding });
+                console.log(`[Upload] Generated embedding for ${file.name}`);
+              }
+            }
+          } catch (embeddingError) {
+            console.error('[Upload] Embedding generation failed:', embeddingError);
+            // Continue without embedding - search will fall back to keyword
+          }
+        }
+
         // Update progress - completed
         setUploadProgress(prev => prev.map((p, idx) =>
           idx === i ? { ...p, status: 'completed', progress: 100 } : p
@@ -377,16 +400,36 @@ export default function EvidenceTriagePage() {
     setIsSearching(true);
 
     try {
-      // First, try local search
-      const localResults = searchEvidence(searchQuery);
+      // Get query embedding for semantic search
+      let queryEmbedding: number[] | undefined;
 
-      if (localResults.length > 0) {
-        const scoreMap = new Map(localResults.map(r => [r.item.id, r.score]));
+      try {
+        const embeddingResponse = await fetch('/api/embeddings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: searchQuery }),
+        });
+
+        if (embeddingResponse.ok) {
+          const embeddingResult = await embeddingResponse.json();
+          queryEmbedding = embeddingResult.embedding;
+          console.log('[Search] Generated query embedding');
+        }
+      } catch (err) {
+        console.error('[Search] Failed to get query embedding:', err);
+        // Continue with keyword-only search
+      }
+
+      // Use hybrid search (combines keyword + semantic)
+      const results = hybridSearch(searchQuery, queryEmbedding);
+
+      if (results.length > 0) {
+        const scoreMap = new Map(results.map(r => [r.item.id, r.score]));
         setSearchResults(scoreMap);
-        setEvidence(localResults.map(r => r.item));
+        setEvidence(results.map(r => r.item));
         setIsSearchResult(true);
       } else {
-        // No local results
+        // No results
         setSearchResults(new Map());
         setEvidence([]);
         setIsSearchResult(true);
