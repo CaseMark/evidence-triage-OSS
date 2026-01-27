@@ -24,6 +24,7 @@ import {
   Eye,
   ArrowLeft,
   Warning,
+  Key,
 } from '@phosphor-icons/react';
 import {
   EvidenceItem,
@@ -66,6 +67,7 @@ import { cn } from '@/lib/utils';
 import { DemoModeBanner } from '@/components/demo-mode-banner';
 import { UsageStatsCard } from '@/components/demo/UsageMeter';
 import { generatePdfThumbnail, extractPdfTextClient } from '@/lib/pdf-utils';
+import { ApiKeyInput, useCaseDevApiKey } from '@/components/case-dev/api-key-input';
 
 // Category icons mapping
 const CATEGORY_ICONS: Record<EvidenceCategory, React.ReactNode> = {
@@ -109,6 +111,17 @@ export default function EvidenceTriagePage() {
   const [sessionStats, setSessionStats] = useState(getSessionStats());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // API key state
+  const { key: apiKey, isValid: hasValidApiKey } = useCaseDevApiKey();
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+
+  // Show API key input if no valid key
+  useEffect(() => {
+    if (!hasValidApiKey && !loading) {
+      setShowApiKeyInput(true);
+    }
+  }, [hasValidApiKey, loading]);
 
   // Load evidence on mount
   useEffect(() => {
@@ -721,6 +734,48 @@ export default function EvidenceTriagePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      {/* Case.dev API Key Modal */}
+      {showApiKeyInput && !hasValidApiKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-lg shadow-lg p-6 w-full max-w-md mx-4">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Key className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Connect to Case.dev</h2>
+                  <p className="text-sm text-muted-foreground">Enter your API key to continue</p>
+                </div>
+              </div>
+
+              <ApiKeyInput
+                onConnectionChange={(connected) => {
+                  if (connected) {
+                    setShowApiKeyInput(false);
+                    loadEvidence();
+                  }
+                }}
+              />
+
+              <div className="text-center text-xs text-muted-foreground">
+                <p>
+                  Don't have an API key?{' '}
+                  <a
+                    href="https://console.case.dev"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Get one free at console.case.dev
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Demo Mode Banner */}
       <DemoModeBanner />
 
@@ -812,6 +867,15 @@ export default function EvidenceTriagePage() {
                 <Calendar className="w-4 h-4" />
               </button>
             </div>
+
+            {/* API Key button */}
+            <button
+              onClick={() => setShowApiKeyInput(true)}
+              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg hover:bg-accent transition-colors"
+              title="Manage Case.dev API Key"
+            >
+              <Key className="w-4 h-4" />
+            </button>
 
             {/* Upload button */}
             <button
