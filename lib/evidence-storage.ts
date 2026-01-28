@@ -4,11 +4,9 @@ import {
   EvidenceItem,
   EvidenceCategory,
   FilterState,
-  SessionStats,
 } from '@/lib/types/evidence';
 
 const STORAGE_KEY = 'evidence-triage-items';
-const STATS_KEY = 'evidence-triage-stats';
 
 // Get all evidence from localStorage
 export function getAllEvidence(): EvidenceItem[] {
@@ -203,98 +201,6 @@ export function getEvidenceByDate(): Map<string, EvidenceItem[]> {
   return new Map(sortedEntries);
 }
 
-// Helper function to get session reset time
-function getSessionResetTime(sessionHours: number = 24): string {
-  const resetTime = new Date();
-  resetTime.setHours(resetTime.getHours() + sessionHours);
-  return resetTime.toISOString();
-}
-
-// Session statistics
-export function getSessionStats(): SessionStats {
-  const defaultStats: SessionStats = {
-    documentsUploaded: 0,
-    classificationsUsed: 0,
-    totalStorageUsed: 0,
-    sessionPrice: 0,
-    sessionStartAt: new Date().toISOString(),
-    sessionResetAt: getSessionResetTime(24),
-  };
-
-  if (typeof window === 'undefined') {
-    return defaultStats;
-  }
-
-  try {
-    const stored = localStorage.getItem(STATS_KEY);
-    if (!stored) {
-      return defaultStats;
-    }
-
-    const stats = JSON.parse(stored) as SessionStats;
-
-    // Initialize price fields if they don't exist (backward compatibility)
-    if (stats.sessionPrice === undefined) {
-      stats.sessionPrice = 0;
-      stats.sessionStartAt = new Date().toISOString();
-      stats.sessionResetAt = getSessionResetTime(24);
-    }
-
-    // Check if session reset needed
-    const now = new Date();
-    if (now >= new Date(stats.sessionResetAt)) {
-      const resetStats: SessionStats = {
-        documentsUploaded: 0,
-        classificationsUsed: 0,
-        totalStorageUsed: calculateStorageUsed(),
-        sessionPrice: 0,
-        sessionStartAt: now.toISOString(),
-        sessionResetAt: getSessionResetTime(24),
-      };
-      localStorage.setItem(STATS_KEY, JSON.stringify(resetStats));
-      return resetStats;
-    }
-
-    return stats;
-  } catch {
-    return defaultStats;
-  }
-}
-
-export function updateSessionStats(updates: Partial<SessionStats>): void {
-  if (typeof window === 'undefined') return;
-
-  const current = getSessionStats();
-  const updated = { ...current, ...updates };
-  localStorage.setItem(STATS_KEY, JSON.stringify(updated));
-}
-
-export function incrementDocumentsUploaded(): void {
-  const stats = getSessionStats();
-  updateSessionStats({ documentsUploaded: stats.documentsUploaded + 1 });
-}
-
-export function decrementDocumentsUploaded(): void {
-  const stats = getSessionStats();
-  updateSessionStats({ documentsUploaded: Math.max(0, stats.documentsUploaded - 1) });
-}
-
-export function incrementClassificationsUsed(): void {
-  const stats = getSessionStats();
-  updateSessionStats({ classificationsUsed: stats.classificationsUsed + 1 });
-}
-
-export function incrementSessionPrice(price: number): void {
-  const stats = getSessionStats();
-  updateSessionStats({ sessionPrice: stats.sessionPrice + price });
-}
-
-// Calculate total storage used
-export function calculateStorageUsed(): number {
-  const items = getAllEvidence();
-  return items.reduce((total, item) => total + item.sizeBytes, 0);
-}
-
 // Search evidence with relevance scoring (client-side)
 export function searchEvidence(query: string): { item: EvidenceItem; score: number }[] {
   const items = getAllEvidence();
@@ -350,20 +256,6 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Calculate time remaining until session reset
-export function calculateTimeRemaining(resetAt: string): string {
-  const now = new Date();
-  const reset = new Date(resetAt);
-  const diff = reset.getTime() - now.getTime();
-
-  if (diff <= 0) return '0h 0m';
-
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-  return `${hours}h ${minutes}m`;
 }
 
 // Cosine similarity between two vectors

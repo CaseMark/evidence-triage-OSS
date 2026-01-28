@@ -23,7 +23,6 @@ import {
   Trash,
   Eye,
   ArrowLeft,
-  Warning,
   Key,
 } from '@phosphor-icons/react';
 import {
@@ -36,36 +35,50 @@ import {
   UploadProgress,
 } from '@/lib/types/evidence';
 import {
+  getAllEvidence as getAllEvidenceLegacy,
+  addEvidence as addEvidenceLegacy,
+  updateEvidence as updateEvidenceLegacy,
+  deleteEvidence as deleteEvidenceLegacy,
+  filterEvidence as filterEvidenceLegacy,
+  getAllTags as getAllTagsLegacy,
+  getCategoryCounts as getCategoryCountsLegacy,
+  generateId as generateIdLegacy,
+  formatFileSize,
+  searchEvidence,
+  hybridSearch as hybridSearchLegacy,
+} from '@/lib/evidence-storage';
+import {
   getAllEvidence,
-  addEvidence,
-  updateEvidence,
-  deleteEvidence,
+  getAllEvidenceMetadata,
+  addEvidenceMetadata,
+  updateEvidenceMetadata,
+  deleteEvidenceMetadata,
+  getEvidenceMetadata,
   filterEvidence,
   getAllTags,
   getCategoryCounts,
-  getSessionStats,
-  incrementDocumentsUploaded,
-  decrementDocumentsUploaded,
-  incrementClassificationsUsed,
-  incrementSessionPrice,
-  calculateStorageUsed,
-  generateId,
-  formatFileSize,
-  searchEvidence,
+  uploadDocument,
+  getDocumentText,
+  searchVault,
+  deleteVaultDocument,
   hybridSearch,
-  calculateTimeRemaining,
-} from '@/lib/evidence-storage';
+  getOrCreateVault,
+  generateId,
+  getStoredVaultId,
+  syncFromVault,
+  saveMetadataToDatabase,
+  updateMetadataInDatabase,
+  deleteMetadataFromDatabase,
+  initializeDatabase,
+  EvidenceMetadata,
+  VaultDocumentRef,
+} from '@/lib/evidence-service';
 import {
-  DEMO_LIMITS,
-  LIMIT_DESCRIPTIONS,
-  UPGRADE_MESSAGES,
   isFileTypeSupported,
-  isFileSizeValid,
-} from '@/lib/demo-limits';
-import { DEMO_LIMITS as CONFIG_LIMITS } from '@/lib/demo-limits/config';
+  SUPPORTED_EXTENSIONS,
+  SUPPORTED_TYPES_DESCRIPTION,
+} from '@/lib/file-types';
 import { cn } from '@/lib/utils';
-import { DemoModeBanner } from '@/components/demo-mode-banner';
-import { UsageStatsCard } from '@/components/demo/UsageMeter';
 import { generatePdfThumbnail, extractPdfTextClient } from '@/lib/pdf-utils';
 import { ApiKeyInput, useCaseDevApiKey } from '@/components/case-dev/api-key-input';
 
@@ -107,8 +120,8 @@ export default function EvidenceTriagePage() {
   const [loading, setLoading] = useState(true);
   const [deletingEvidence, setDeletingEvidence] = useState<Set<string>>(new Set());
   const [viewingEvidence, setViewingEvidence] = useState<EvidenceItem | null>(null);
-  const [limitWarning, setLimitWarning] = useState<string | null>(null);
-  const [sessionStats, setSessionStats] = useState(getSessionStats());
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ synced: number; message: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -123,18 +136,113 @@ export default function EvidenceTriagePage() {
     }
   }, [hasValidApiKey, loading]);
 
+  // Perform vault sync - recovers metadata for documents in vault
+  const performVaultSync = useCallback(async () => {
+    const vaultId = getStoredVaultId();
+    if (!vaultId) {
+      console.log('[Sync] No vault ID, skipping sync');
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus(null);
+
+    try {
+      console.log('[Sync] Starting vault sync...');
+      const result = await syncFromVault();
+
+      // Always reload evidence after sync (database data was loaded into localStorage cache)
+      loadEvidence();
+
+      if (result.synced > 0) {
+        setSyncStatus({
+          synced: result.synced,
+          message: `Synced ${result.synced} document${result.synced > 1 ? 's' : ''} from vault`
+        });
+        console.log('[Sync] Synced', result.synced, 'documents');
+      } else if (result.fromDatabase > 0) {
+        setSyncStatus({
+          synced: result.fromDatabase,
+          message: `Loaded ${result.fromDatabase} document${result.fromDatabase > 1 ? 's' : ''} from database`
+        });
+        console.log('[Sync] Loaded', result.fromDatabase, 'documents from database');
+      } else if (result.errors.length > 0) {
+        console.error('[Sync] Sync errors:', result.errors);
+      } else {
+        console.log('[Sync] No documents found');
+      }
+    } catch (error) {
+      console.error('[Sync] Sync failed:', error);
+    } finally {
+      setIsSyncing(false);
+      // Clear sync status after a few seconds
+      setTimeout(() => setSyncStatus(null), 5000);
+    }
+  }, []);
+
   // Load evidence on mount
   useEffect(() => {
     loadEvidence();
-    setSessionStats(getSessionStats());
     setLoading(false);
   }, []);
 
+  // Auto-sync from vault on initial load if already connected
+  useEffect(() => {
+    if (hasValidApiKey && !loading) {
+      performVaultSync();
+    }
+  }, [hasValidApiKey, loading, performVaultSync]);
+
   const loadEvidence = useCallback(() => {
-    const items = filterEvidence(filters);
-    setEvidence(items);
-    setAllTags(getAllTags());
-    setCategoryCounts(getCategoryCounts());
+    // Get vault-based evidence
+    const vaultItems = filterEvidence(filters);
+
+    // Also get legacy evidence for backward compatibility
+    const legacyItems = filterEvidenceLegacy(filters);
+
+    // Merge, preferring vault items but including legacy items that aren't in vault
+    const vaultIds = new Set(vaultItems.map(item => item.id));
+    const mergedItems = [
+      ...vaultItems,
+      ...legacyItems.filter(item => !vaultIds.has(item.id)),
+    ];
+
+    // Sort the merged items
+    mergedItems.sort((a, b) => {
+      let comparison = 0;
+      switch (filters.sortBy) {
+        case 'date':
+          const dateA = a.dateDetected || a.createdAt;
+          const dateB = b.dateDetected || b.createdAt;
+          comparison = dateA.localeCompare(dateB);
+          break;
+        case 'relevance':
+          comparison = a.relevanceScore - b.relevanceScore;
+          break;
+        case 'name':
+          comparison = a.filename.localeCompare(b.filename);
+          break;
+      }
+      return filters.sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    setEvidence(mergedItems);
+
+    // Merge tags from both sources
+    const vaultTags = getAllTags();
+    const legacyTags = getAllTagsLegacy();
+    const allTagsSet = new Set([...vaultTags, ...legacyTags]);
+    setAllTags(Array.from(allTagsSet).sort());
+
+    // Merge category counts
+    const vaultCounts = getCategoryCounts();
+    const legacyCounts = getCategoryCountsLegacy();
+    const mergedCounts = { ...legacyCounts };
+    for (const [category, count] of Object.entries(vaultCounts)) {
+      mergedCounts[category as EvidenceCategory] = (mergedCounts[category as EvidenceCategory] || 0) + count;
+    }
+    setCategoryCounts(mergedCounts);
+
     setIsSearchResult(false);
     setSearchResults(new Map());
   }, [filters]);
@@ -150,21 +258,6 @@ export default function EvidenceTriagePage() {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    // Check document limit against currently stored documents
-    const currentDocCount = getAllEvidence().length;
-    if (currentDocCount >= CONFIG_LIMITS.documents.maxDocumentsPerSession) {
-      setLimitWarning('documentLimit');
-      return;
-    }
-
-    // Check storage limit
-    const currentStorage = calculateStorageUsed();
-    const totalNewSize = fileArray.reduce((sum, f) => sum + f.size, 0);
-    if (currentStorage + totalNewSize > DEMO_LIMITS.maxTotalStorageBytes) {
-      setLimitWarning('storageLimit');
-      return;
-    }
-
     setIsUploading(true);
 
     // Initialize progress for all files
@@ -175,11 +268,20 @@ export default function EvidenceTriagePage() {
     }));
     setUploadProgress(initialProgress);
 
+    // Ensure vault is ready
+    const vaultInfo = await getOrCreateVault();
+    if (!vaultInfo) {
+      console.error('[Upload] Vault not available');
+      setUploadProgress(prev => prev.map(p => ({ ...p, status: 'failed', error: 'Vault not available' })));
+      setIsUploading(false);
+      return;
+    }
+
     // Process files
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
 
-      // Validate file
+      // Validate file type
       if (!isFileTypeSupported(file)) {
         setUploadProgress(prev => prev.map((p, idx) =>
           idx === i ? { ...p, status: 'failed', error: 'Unsupported file type' } : p
@@ -187,50 +289,36 @@ export default function EvidenceTriagePage() {
         continue;
       }
 
-      if (!isFileSizeValid(file)) {
-        setUploadProgress(prev => prev.map((p, idx) =>
-          idx === i ? { ...p, status: 'failed', error: `File too large (max ${DEMO_LIMITS.maxFileSizeBytes / 1024 / 1024}MB)` } : p
-        ));
-        continue;
-      }
-
-      // Check if we've hit the limit during processing
-      const currentCount = getAllEvidence().length;
-      if (currentCount >= CONFIG_LIMITS.documents.maxDocumentsPerSession) {
-        setUploadProgress(prev => prev.map((p, idx) =>
-          idx === i ? { ...p, status: 'failed', error: 'Document limit reached' } : p
-        ));
-        continue;
-      }
-
       try {
-        // Update progress - uploading
+        // Update progress - uploading to vault
         setUploadProgress(prev => prev.map((p, idx) =>
           idx === i ? { ...p, status: 'uploading', progress: 20 } : p
         ));
 
-        // Create evidence item
+        // Upload to vault (OCR and indexing handled automatically by case.dev)
+        const uploadResult = await uploadDocument(file, (status, progress) => {
+          setUploadProgress(prev => prev.map((p, idx) =>
+            idx === i ? { ...p, progress: Math.min(progress, 50) } : p
+          ));
+        });
+
+        if (!uploadResult.success || !uploadResult.docRef) {
+          setUploadProgress(prev => prev.map((p, idx) =>
+            idx === i ? { ...p, status: 'failed', error: uploadResult.error || 'Upload failed' } : p
+          ));
+          continue;
+        }
+
         const evidenceId = generateId();
-        const newEvidence: EvidenceItem = {
-          id: evidenceId,
-          filename: file.name,
-          contentType: file.type,
-          sizeBytes: file.size,
-          category: 'other',
-          tags: [],
-          relevanceScore: 0,
-          status: 'uploading',
-          createdAt: new Date().toISOString(),
-        };
+        let thumbnailDataUrl: string | undefined;
 
         // Store thumbnail for images
         if (file.type.startsWith('image/') && file.size < 500 * 1024) {
           const reader = new FileReader();
-          const thumbnailUrl = await new Promise<string>((resolve) => {
+          thumbnailDataUrl = await new Promise<string>((resolve) => {
             reader.onload = () => resolve(reader.result as string);
             reader.readAsDataURL(file);
           });
-          newEvidence.thumbnailDataUrl = thumbnailUrl;
         }
 
         // Generate thumbnail for PDFs
@@ -238,77 +326,98 @@ export default function EvidenceTriagePage() {
           try {
             const pdfThumbnail = await generatePdfThumbnail(file, 300, 400);
             if (pdfThumbnail) {
-              newEvidence.thumbnailDataUrl = pdfThumbnail;
+              thumbnailDataUrl = pdfThumbnail;
             }
           } catch (err) {
             console.error('PDF thumbnail generation failed:', err);
           }
         }
 
-        // Store text content for text files
-        if (file.type === 'text/plain') {
-          const text = await file.text();
-          newEvidence.textContent = text;
-          newEvidence.extractedText = text.substring(0, 5000);
-        }
+        // Create initial metadata
+        const metadata: EvidenceMetadata = {
+          id: evidenceId,
+          vaultDocRef: uploadResult.docRef,
+          category: 'other',
+          tags: [],
+          relevanceScore: 0,
+          thumbnailDataUrl,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
 
-        addEvidence(newEvidence);
-        incrementDocumentsUploaded();
-        setSessionStats(getSessionStats());
+        addEvidenceMetadata(metadata);
 
-        // Update progress - extracting
+        // Save initial metadata to database
+        await saveMetadataToDatabase(metadata);
+
+        // Update progress - extracting text (vault handles OCR)
         setUploadProgress(prev => prev.map((p, idx) =>
-          idx === i ? { ...p, status: 'extracting', progress: 40, evidenceId } : p
+          idx === i ? { ...p, status: 'extracting', progress: 50, evidenceId } : p
         ));
 
-        // Extract text from file
-        let extractedText = newEvidence.textContent || '';
-        if (!extractedText && (file.type === 'application/pdf' || file.type.startsWith('image/'))) {
-          // For PDFs, try client-side extraction first (more reliable)
-          if (file.type === 'application/pdf') {
-            try {
-              extractedText = await extractPdfTextClient(file);
-              console.log(`[PDF] Client-side extracted ${extractedText.length} characters`);
-            } catch (err) {
-              console.error('Client-side PDF extraction failed:', err);
+        // Get extracted text from vault (OCR result)
+        let extractedText = '';
+
+        // For text files, read directly
+        if (file.type === 'text/plain') {
+          extractedText = await file.text();
+        } else {
+          // Wait a moment for vault processing, then try to get text
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          try {
+            const vaultText = await getDocumentText(
+              uploadResult.docRef.vaultId,
+              uploadResult.docRef.objectId
+            );
+            if (vaultText) {
+              extractedText = vaultText;
+              console.log(`[Upload] Got ${extractedText.length} chars from vault OCR`);
             }
+          } catch (err) {
+            console.log('[Upload] Vault text not ready yet, falling back to local extraction');
           }
 
-          // Fall back to server-side OCR for images or if PDF extraction failed
-          if (!extractedText || file.type.startsWith('image/')) {
-            try {
-              const formData = new FormData();
-              formData.append('file', file);
-
-              const extractResponse = await fetch('/api/extract-text', {
-                method: 'POST',
-                body: formData,
-              });
-
-              if (extractResponse.ok) {
-                const extractResult = await extractResponse.json();
-                const serverText = extractResult.text || '';
-                const extractCost = extractResult.cost || 0;
-                // Use server result if it's longer (better OCR)
-                if (serverText.length > extractedText.length) {
-                  extractedText = serverText;
-                }
-                // Track OCR cost
-                if (extractCost > 0) {
-                  incrementSessionPrice(extractCost);
-                  setSessionStats(getSessionStats());
-                }
+          // Fall back to local extraction if vault text not ready
+          if (!extractedText) {
+            if (file.type === 'application/pdf') {
+              try {
+                extractedText = await extractPdfTextClient(file);
+                console.log(`[PDF] Client-side extracted ${extractedText.length} characters`);
+              } catch (err) {
+                console.error('Client-side PDF extraction failed:', err);
               }
-            } catch (err) {
-              console.error('Server text extraction failed:', err);
+            }
+
+            // Fall back to server-side OCR
+            if (!extractedText || file.type.startsWith('image/')) {
+              try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const extractResponse = await fetch('/api/extract-text', {
+                  method: 'POST',
+                  body: formData,
+                });
+
+                if (extractResponse.ok) {
+                  const extractResult = await extractResponse.json();
+                  const serverText = extractResult.text || '';
+                  if (serverText.length > extractedText.length) {
+                    extractedText = serverText;
+                  }
+                }
+              } catch (err) {
+                console.error('Server text extraction failed:', err);
+              }
             }
           }
         }
 
-        // Update with extracted text
-        updateEvidence(evidenceId, {
+        // Update metadata with extracted text
+        updateEvidenceMetadata(evidenceId, {
           extractedText: extractedText.substring(0, 5000),
-          status: 'classifying',
+          vaultDocRef: { ...uploadResult.docRef, status: 'processing' },
         });
 
         // Update progress - classifying
@@ -316,74 +425,48 @@ export default function EvidenceTriagePage() {
           idx === i ? { ...p, status: 'classifying', progress: 70 } : p
         ));
 
-        // Check session price limit before classification
-        const currentStats = getSessionStats();
-        const priceLimit = CONFIG_LIMITS.pricing.sessionPriceLimit;
+        // Classify the document
+        try {
+          const classifyResponse = await fetch('/api/classify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: extractedText,
+              filename: file.name,
+              contentType: file.type,
+            }),
+          });
 
-        if (currentStats.sessionPrice < priceLimit) {
-          try {
-            const classifyResponse = await fetch('/api/classify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text: extractedText,
-                filename: file.name,
-                contentType: file.type,
-              }),
+          if (classifyResponse.ok) {
+            const classifyResult = await classifyResponse.json();
+            const classification = classifyResult.classification;
+
+            updateEvidenceMetadata(evidenceId, {
+              category: classification.category,
+              tags: classification.suggestedTags || [],
+              summary: classification.summary,
+              dateDetected: classification.dateDetected,
+              relevanceScore: classification.relevanceScore,
+              vaultDocRef: { ...uploadResult.docRef, status: 'ready' },
             });
 
-            if (classifyResponse.ok) {
-              const classifyResult = await classifyResponse.json();
-              const classification = classifyResult.classification;
-              const cost = classifyResult.cost || 0;
-
-              updateEvidence(evidenceId, {
-                category: classification.category,
-                tags: classification.suggestedTags || [],
-                summary: classification.summary,
-                dateDetected: classification.dateDetected,
-                relevanceScore: classification.relevanceScore,
-                status: 'completed',
-              });
-
-              // Track classification count and cost
-              incrementClassificationsUsed();
-              if (cost > 0) {
-                incrementSessionPrice(cost);
-              }
-              setSessionStats(getSessionStats());
-            } else {
-              updateEvidence(evidenceId, { status: 'completed' });
-            }
-          } catch (err) {
-            console.error('Classification failed:', err);
-            updateEvidence(evidenceId, { status: 'completed' });
-          }
-        } else {
-          // Price limit reached, complete without classification
-          updateEvidence(evidenceId, { status: 'completed' });
-        }
-
-        // Generate embeddings for RAG search (async, don't block)
-        if (extractedText) {
-          try {
-            const embeddingResponse = await fetch('/api/embeddings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: extractedText }),
+            // Update database with classification results
+            await updateMetadataInDatabase(evidenceId, {
+              category: classification.category,
+              tags: classification.suggestedTags || [],
+              summary: classification.summary,
+              dateDetected: classification.dateDetected,
             });
-
-            if (embeddingResponse.ok) {
-              const embeddingResult = await embeddingResponse.json();
-              if (embeddingResult.embedding) {
-                updateEvidence(evidenceId, { embedding: embeddingResult.embedding });
-                console.log(`[Upload] Generated embedding for ${file.name}`);
-              }
-            }
-          } catch (embeddingError) {
-            console.error('[Upload] Embedding generation failed:', embeddingError);
-            // Continue without embedding - search will fall back to keyword
+          } else {
+            updateEvidenceMetadata(evidenceId, {
+              vaultDocRef: { ...uploadResult.docRef, status: 'ready' },
+            });
           }
+        } catch (err) {
+          console.error('Classification failed:', err);
+          updateEvidenceMetadata(evidenceId, {
+            vaultDocRef: { ...uploadResult.docRef, status: 'ready' },
+          });
         }
 
         // Update progress - completed
@@ -414,39 +497,69 @@ export default function EvidenceTriagePage() {
     setIsSearching(true);
 
     try {
-      // Get query embedding for semantic search
-      let queryEmbedding: number[] | undefined;
+      // Check if vault is available for semantic search
+      const vaultId = getStoredVaultId();
 
-      try {
-        const embeddingResponse = await fetch('/api/embeddings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: searchQuery }),
+      if (vaultId) {
+        // Use vault semantic search (case.dev handles embeddings)
+        console.log('[Search] Using vault semantic search');
+        const results = await hybridSearch(searchQuery, {
+          categories: filters.categories.length > 0 ? filters.categories : undefined,
+          tags: filters.tags.length > 0 ? filters.tags : undefined,
         });
 
-        if (embeddingResponse.ok) {
-          const embeddingResult = await embeddingResponse.json();
-          queryEmbedding = embeddingResult.embedding;
-          console.log('[Search] Generated query embedding');
+        if (results.length > 0) {
+          const scoreMap = new Map(results.map(r => [r.item.id, r.score]));
+          setSearchResults(scoreMap);
+          setEvidence(results.map(r => r.item));
+          setIsSearchResult(true);
+        } else {
+          // Fall back to local keyword search
+          console.log('[Search] No vault results, falling back to keyword search');
+          const keywordResults = searchEvidence(searchQuery);
+          if (keywordResults.length > 0) {
+            const scoreMap = new Map(keywordResults.map(r => [r.item.id, r.score]));
+            setSearchResults(scoreMap);
+            setEvidence(keywordResults.map(r => r.item));
+            setIsSearchResult(true);
+          } else {
+            setSearchResults(new Map());
+            setEvidence([]);
+            setIsSearchResult(true);
+          }
         }
-      } catch (err) {
-        console.error('[Search] Failed to get query embedding:', err);
-        // Continue with keyword-only search
-      }
-
-      // Use hybrid search (combines keyword + semantic)
-      const results = hybridSearch(searchQuery, queryEmbedding);
-
-      if (results.length > 0) {
-        const scoreMap = new Map(results.map(r => [r.item.id, r.score]));
-        setSearchResults(scoreMap);
-        setEvidence(results.map(r => r.item));
-        setIsSearchResult(true);
       } else {
-        // No results
-        setSearchResults(new Map());
-        setEvidence([]);
-        setIsSearchResult(true);
+        // No vault, use legacy local search
+        console.log('[Search] Using legacy local search');
+        let queryEmbedding: number[] | undefined;
+
+        try {
+          const embeddingResponse = await fetch('/api/embeddings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: searchQuery }),
+          });
+
+          if (embeddingResponse.ok) {
+            const embeddingResult = await embeddingResponse.json();
+            queryEmbedding = embeddingResult.embedding;
+          }
+        } catch (err) {
+          console.error('[Search] Failed to get query embedding:', err);
+        }
+
+        const results = hybridSearchLegacy(searchQuery, queryEmbedding);
+
+        if (results.length > 0) {
+          const scoreMap = new Map(results.map(r => [r.item.id, r.score]));
+          setSearchResults(scoreMap);
+          setEvidence(results.map(r => r.item));
+          setIsSearchResult(true);
+        } else {
+          setSearchResults(new Map());
+          setEvidence([]);
+          setIsSearchResult(true);
+        }
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -463,10 +576,33 @@ export default function EvidenceTriagePage() {
     setDeletingEvidence(prev => new Set(prev).add(evidenceId));
 
     try {
-      deleteEvidence(evidenceId);
-      decrementDocumentsUploaded();
+      // Get metadata to find vault reference
+      const metadata = getEvidenceMetadata(evidenceId);
+
+      // Delete from vault if it has a vault reference
+      if (metadata?.vaultDocRef) {
+        try {
+          await deleteVaultDocument(
+            metadata.vaultDocRef.vaultId,
+            metadata.vaultDocRef.objectId
+          );
+          console.log('[Delete] Removed from vault:', metadata.vaultDocRef.objectId);
+        } catch (err) {
+          console.error('[Delete] Failed to delete from vault:', err);
+          // Continue with local deletion even if vault deletion fails
+        }
+      }
+
+      // Delete local metadata
+      deleteEvidenceMetadata(evidenceId);
+
+      // Delete from database
+      await deleteMetadataFromDatabase(evidenceId);
+
+      // Also try legacy storage for backward compatibility
+      deleteEvidenceLegacy(evidenceId);
+
       loadEvidence();
-      setSessionStats(getSessionStats());
 
       if (viewingEvidence?.id === evidenceId) {
         setViewingEvidence(null);
@@ -559,36 +695,6 @@ export default function EvidenceTriagePage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <SpinnerGap className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Limit Warning Modal
-  if (limitWarning) {
-    const warning = UPGRADE_MESSAGES[limitWarning as keyof typeof UPGRADE_MESSAGES];
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="bg-card border border-border rounded-xl p-8 max-w-md text-center">
-          <Warning className="w-12 h-12 text-yellow-500 mx-auto mb-4" weight="fill" />
-          <h2 className="text-xl font-semibold text-foreground mb-2">{warning.title}</h2>
-          <p className="text-muted-foreground mb-6">{warning.description}</p>
-          <div className="flex gap-3 justify-center">
-            <button
-              onClick={() => setLimitWarning(null)}
-              className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Go Back
-            </button>
-            <a
-              href={warning.ctaUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              {warning.cta}
-            </a>
-          </div>
-        </div>
       </div>
     );
   }
@@ -754,6 +860,8 @@ export default function EvidenceTriagePage() {
                   if (connected) {
                     setShowApiKeyInput(false);
                     loadEvidence();
+                    // Auto-sync from vault after connection
+                    performVaultSync();
                   }
                 }}
               />
@@ -776,9 +884,6 @@ export default function EvidenceTriagePage() {
         </div>
       )}
 
-      {/* Demo Mode Banner */}
-      <DemoModeBanner />
-
       {/* Header */}
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
@@ -798,9 +903,18 @@ export default function EvidenceTriagePage() {
               </svg>
               <span className="font-semibold">case.dev</span>
             </a>
-            <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-              {sessionStats.documentsUploaded}/{CONFIG_LIMITS.documents.maxDocumentsPerSession} docs
-            </div>
+            {isSyncing && (
+              <div className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 px-2 py-1 rounded">
+                <SpinnerGap className="w-3 h-3 animate-spin" />
+                Syncing from vault...
+              </div>
+            )}
+            {syncStatus && (
+              <div className="flex items-center gap-1.5 text-xs text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded">
+                <Check className="w-3 h-3" />
+                {syncStatus.message}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -892,7 +1006,7 @@ export default function EvidenceTriagePage() {
               multiple
               onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
               className="hidden"
-              accept={DEMO_LIMITS.supportedExtensions.join(',')}
+              accept={SUPPORTED_EXTENSIONS.join(',')}
             />
           </div>
         </div>
@@ -987,17 +1101,6 @@ export default function EvidenceTriagePage() {
                 <option value="name-desc">Name (Z-A)</option>
               </select>
             </div>
-
-            {/* Usage Stats */}
-            <div className="mt-6 pt-6 border-t border-border">
-              <UsageStatsCard
-                documentsUsed={sessionStats.documentsUploaded}
-                documentsLimit={CONFIG_LIMITS.documents.maxDocumentsPerSession}
-                priceUsed={sessionStats.sessionPrice}
-                priceLimit={CONFIG_LIMITS.pricing.sessionPriceLimit}
-                timeRemaining={calculateTimeRemaining(sessionStats.sessionResetAt)}
-              />
-            </div>
           </div>
         </aside>
 
@@ -1071,7 +1174,7 @@ export default function EvidenceTriagePage() {
               </button>
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              {LIMIT_DESCRIPTIONS.supportedTypes}
+              {SUPPORTED_TYPES_DESCRIPTION}
             </p>
           </div>
 

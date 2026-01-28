@@ -37,6 +37,17 @@ export const CATEGORY_COLORS: Record<EvidenceCategory, string> = {
   other: 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-300',
 };
 
+// Vault document reference - links to case.dev vault storage
+export interface VaultDocumentRef {
+  vaultId: string;
+  objectId: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  status: 'uploading' | 'processing' | 'ready' | 'failed';
+}
+
 // Evidence item stored in localStorage
 export interface EvidenceItem {
   id: string;
@@ -56,8 +67,12 @@ export interface EvidenceItem {
   thumbnailDataUrl?: string;
   // For text content
   textContent?: string;
-  // Embedding vector for RAG search
+  // Embedding vector for RAG search (legacy - now handled by vault)
   embedding?: number[];
+  // Vault document reference (new - for case.dev vault storage)
+  vaultDocRef?: VaultDocumentRef;
+  // Flag indicating this item was recovered from vault and may need re-classification
+  needsSync?: boolean;
 }
 
 // Upload progress tracking
@@ -100,23 +115,4 @@ export interface SearchResult {
   evidenceId: string;
   score: number;
   matchedText?: string;
-}
-
-// Demo limits for evidence triage
-export interface EvidenceTriageLimits {
-  maxDocumentsPerSession: number;
-  maxFileSizeBytes: number;
-  maxTotalStorageBytes: number;
-  maxClassificationsPerSession: number;
-}
-
-// Session statistics
-export interface SessionStats {
-  documentsUploaded: number;
-  classificationsUsed: number;
-  totalStorageUsed: number;
-  // Price-based tracking
-  sessionPrice: number; // Total price used in current session
-  sessionStartAt: string; // When the current session started
-  sessionResetAt: string; // When the session should reset
 }

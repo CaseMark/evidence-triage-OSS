@@ -8,6 +8,7 @@ import { Key, Check, X, CircleNotch, Eye, EyeSlash, Trash } from '@phosphor-icon
 
 const API_KEY_STORAGE_KEY = 'case-dev-api-key';
 const DATABASE_PROJECT_ID_KEY = 'case-dev-database-project-id';
+const VAULT_ID_KEY = 'case-dev-vault-id';
 
 export interface ApiKeyState {
   key: string | null;
@@ -38,6 +39,7 @@ export function removeApiKey(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(API_KEY_STORAGE_KEY);
   localStorage.removeItem(DATABASE_PROJECT_ID_KEY);
+  localStorage.removeItem(VAULT_ID_KEY);
 }
 
 // Get stored database project ID
@@ -52,11 +54,25 @@ function saveDatabaseProjectId(projectId: string): void {
   localStorage.setItem(DATABASE_PROJECT_ID_KEY, projectId);
 }
 
+// Save vault ID
+function saveVaultId(vaultId: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(VAULT_ID_KEY, vaultId);
+}
+
+// Get stored vault ID
+export function getStoredVaultId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(VAULT_ID_KEY);
+}
+
 // Verify API key works by making a server-side request
+// The server handles database and vault initialization to avoid CORS issues
 export async function verifyApiKey(key: string): Promise<boolean> {
   try {
-    // Get existing database project ID if any
+    // Get existing IDs if any
     const existingProjectId = getStoredDatabaseProjectId();
+    const existingVaultId = getStoredVaultId();
 
     const response = await fetch('/api/case-dev/connect', {
       method: 'POST',
@@ -66,6 +82,7 @@ export async function verifyApiKey(key: string): Promise<boolean> {
       body: JSON.stringify({
         apiKey: key,
         existingProjectId,
+        existingVaultId,
       }),
     });
 
@@ -75,11 +92,17 @@ export async function verifyApiKey(key: string): Promise<boolean> {
       return false;
     }
 
-    // Store database project ID if returned
+    // Store database project ID and vault ID from server response
     const data = await response.json();
+
     if (data.database?.projectId) {
       saveDatabaseProjectId(data.database.projectId);
-      console.log('[Database] Project ID stored:', data.database.projectId);
+      console.log('[Database] Project ID stored:', data.database.projectId, 'Status:', data.database.status);
+    }
+
+    if (data.vault?.vaultId) {
+      saveVaultId(data.vault.vaultId);
+      console.log('[Vault] Vault ID stored:', data.vault.vaultId, 'Status:', data.vault.status);
     }
 
     return true;

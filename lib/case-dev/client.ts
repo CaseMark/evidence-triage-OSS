@@ -144,7 +144,7 @@ export class CaseDevClient {
   }
 
   /**
-   * Get or create a vault by name
+   * Get or create a vault by name (with prefix matching support)
    */
   async getOrCreateVault(params: {
     name: string;
@@ -153,12 +153,52 @@ export class CaseDevClient {
   }): Promise<{ id: string; name: string }> {
     try {
       const vaults = await this.listVaults();
-      const existing = vaults.find(v => v.name === params.name);
-      if (existing) return existing;
+      console.log('[CaseDevClient] listVaults returned:', vaults.length, 'vaults');
+
+      if (vaults.length > 0) {
+        // Log vault names for debugging
+        console.log('[CaseDevClient] Available vaults:', vaults.map(v => `${v.id}: ${v.name}`).join(', '));
+
+        // Try exact match first
+        const exactMatch = vaults.find(v => v.name === params.name);
+        if (exactMatch) {
+          console.log('[CaseDevClient] Found exact vault match:', exactMatch.id, exactMatch.name);
+          return exactMatch;
+        }
+
+        // Try prefix match (for vaults with unique suffix)
+        const prefixMatch = vaults.find(v => v.name.startsWith(params.name));
+        if (prefixMatch) {
+          console.log('[CaseDevClient] Found prefix vault match:', prefixMatch.id, prefixMatch.name);
+          return prefixMatch;
+        }
+      }
+
+      console.log('[CaseDevClient] No matching vault found for:', params.name);
     } catch (error) {
       console.log('[CaseDevClient] Could not list vaults, attempting to create:', error);
     }
+
+    console.log('[CaseDevClient] Creating new vault:', params.name);
     return this.createVault(params);
+  }
+
+  /**
+   * Find a vault by name prefix
+   */
+  async findVaultByPrefix(prefix: string): Promise<{ id: string; name: string } | null> {
+    try {
+      const vaults = await this.listVaults();
+      console.log('[CaseDevClient] findVaultByPrefix - searching', vaults.length, 'vaults for prefix:', prefix);
+      const matching = vaults.find(v => v.name.startsWith(prefix));
+      if (matching) {
+        console.log('[CaseDevClient] findVaultByPrefix - found:', matching.id, matching.name);
+      }
+      return matching || null;
+    } catch (error) {
+      console.error('[CaseDevClient] Error finding vault by prefix:', error);
+      return null;
+    }
   }
 
   /**
@@ -378,10 +418,42 @@ export class CaseDevClient {
       }),
     });
 
-    if (Array.isArray(response)) return response;
-    if (response?.results) return response.results;
-    if (response?.data) return response.data;
-    return [];
+    console.log('[CaseDevClient] Raw search response:', JSON.stringify(response, null, 2));
+
+    // Handle different response formats from case.dev API
+    let results: any[] = [];
+    if (Array.isArray(response)) {
+      results = response;
+    } else if (response?.results) {
+      results = response.results;
+    } else if (response?.data) {
+      results = response.data;
+    }
+
+    console.log('[CaseDevClient] Parsed results count:', results.length);
+
+    // Normalize the results - case.dev may return 'id' instead of 'objectId'
+    // Also normalize score to 0-1 range (API may return 0-1 or 0-100)
+    return results.map((r: any) => {
+      let rawScore = r.score || r.relevance || 0;
+      // Normalize score to 0-1 range if it appears to be in 0-100 range
+      const normalizedScore = rawScore > 1 ? rawScore / 100 : rawScore;
+
+      console.log('[CaseDevClient] Mapping result:', {
+        objectId: r.objectId || r.id || r.object_id,
+        filename: r.filename || r.name,
+        rawScore,
+        normalizedScore,
+      });
+
+      return {
+        objectId: r.objectId || r.id || r.object_id,
+        filename: r.filename || r.name || 'Unknown',
+        score: normalizedScore,
+        matchedText: r.matchedText || r.matched_text || r.text,
+        metadata: r.metadata || {},
+      };
+    });
   }
 
   // ============================================
