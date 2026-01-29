@@ -418,42 +418,99 @@ export class CaseDevClient {
       }),
     });
 
-    console.log('[CaseDevClient] Raw search response:', JSON.stringify(response, null, 2));
+    console.log('[CaseDevClient] Raw search response keys:', Object.keys(response || {}));
 
     // Handle different response formats from case.dev API
-    let results: any[] = [];
+    // The API returns results in "chunks" array, with source info in "sources"
+    let chunks: any[] = [];
+    let sources: any[] = [];
+
     if (Array.isArray(response)) {
-      results = response;
+      chunks = response;
+    } else if (response?.chunks) {
+      chunks = response.chunks;
+      sources = response.sources || [];
     } else if (response?.results) {
-      results = response.results;
+      chunks = response.results;
     } else if (response?.data) {
-      results = response.data;
+      chunks = response.data;
     }
 
-    console.log('[CaseDevClient] Parsed results count:', results.length);
+    console.log('[CaseDevClient] Parsed chunks count:', chunks.length);
 
-    // Normalize the results - case.dev may return 'id' instead of 'objectId'
-    // Also normalize score to 0-1 range (API may return 0-1 or 0-100)
-    return results.map((r: any) => {
-      let rawScore = r.score || r.relevance || 0;
-      // Normalize score to 0-1 range if it appears to be in 0-100 range
-      const normalizedScore = rawScore > 1 ? rawScore / 100 : rawScore;
+    // Build a map of source info (object_id -> filename)
+    const sourceMap = new Map<string, string>();
+    for (const source of sources) {
+      sourceMap.set(source.id, source.filename);
+    }
 
-      console.log('[CaseDevClient] Mapping result:', {
-        objectId: r.objectId || r.id || r.object_id,
-        filename: r.filename || r.name,
-        rawScore,
-        normalizedScore,
+    // Group chunks by object_id and take the best score for each document
+    const documentScores = new Map<string, { score: number; text: string }>();
+
+    for (const chunk of chunks) {
+      const objectId = chunk.object_id || chunk.objectId || chunk.id;
+
+      // Handle different score formats:
+      // - hybridScore: 0-1 (higher is better) - used in hybrid search
+      // - distance: 0-2 typically (lower is better) - used in fast/vector search
+      // - score/relevance: 0-1 (higher is better)
+      let score: number;
+      if (chunk.hybridScore !== undefined) {
+        score = chunk.hybridScore;
+      } else if (chunk.distance !== undefined) {
+        // Convert distance to similarity score (lower distance = higher score)
+        // Typical cosine distance ranges from 0 to 2, we normalize to 0-1
+        score = Math.max(0, 1 - (chunk.distance / 2));
+      } else {
+        score = chunk.score || chunk.relevance || 0;
+      }
+
+      const text = chunk.text || '';
+
+      console.log('[CaseDevClient] Processing chunk:', {
+        objectId,
+        hybridScore: chunk.hybridScore,
+        distance: chunk.distance,
+        calculatedScore: score,
       });
 
-      return {
-        objectId: r.objectId || r.id || r.object_id,
-        filename: r.filename || r.name || 'Unknown',
-        score: normalizedScore,
-        matchedText: r.matchedText || r.matched_text || r.text,
-        metadata: r.metadata || {},
-      };
-    });
+      const existing = documentScores.get(objectId);
+      if (!existing || score > existing.score) {
+        documentScores.set(objectId, { score, text });
+      }
+    }
+
+    // Convert to results array, filtering out orphaned documents (not in sources)
+    const results: VaultSearchResult[] = [];
+    for (const [objectId, { score, text }] of documentScores) {
+      const filename = sourceMap.get(objectId);
+
+      // Skip documents that don't have a source entry (orphaned index entries)
+      if (!filename) {
+        console.log('[CaseDevClient] Skipping orphaned document:', objectId);
+        continue;
+      }
+
+      console.log('[CaseDevClient] Mapping result:', {
+        objectId,
+        filename,
+        score,
+      });
+
+      results.push({
+        objectId,
+        filename,
+        score,
+        matchedText: text,
+        metadata: {},
+      });
+    }
+
+    // Sort by score descending
+    results.sort((a, b) => b.score - a.score);
+
+    console.log('[CaseDevClient] Final results count:', results.length);
+    return results;
   }
 
   // ============================================

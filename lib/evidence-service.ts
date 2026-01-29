@@ -742,11 +742,11 @@ export async function hybridSearch(
   console.log('[EvidenceService] hybridSearch: Starting search for:', query);
 
   // Get semantic search results from vault via API
-  // Using 'fast' method (vector search) and low minScore for better results
+  // Using 'hybrid' method which combines vector + BM25 keyword search
   const vaultResults = await searchVault(query, {
     limit: 50,
-    minScore: 0.01, // Very low threshold to catch any matches
-    method: 'fast'  // Try vector search instead of hybrid
+    minScore: 0.01,
+    method: 'hybrid'
   });
   console.log('[EvidenceService] hybridSearch: Got', vaultResults.length, 'vault results');
 
