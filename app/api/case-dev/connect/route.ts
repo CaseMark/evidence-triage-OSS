@@ -84,29 +84,25 @@ export async function POST(request: NextRequest) {
           databaseStatus = 'existing';
           projectId = existingProjectId;
           projectName = project.name;
-          console.log('[Database] Using provided existing database:', existingProjectId);
         } catch (error) {
-          console.warn('[Database] Provided project not found, searching for existing...');
+          // Provided project not found, will search for existing
         }
       }
 
       // If no valid existing project, search for one with our prefix
       if (!projectId) {
-        console.log('[Database] Searching for database with prefix:', DATABASE_NAME_PREFIX);
         const existingDb = await findDatabaseWithPrefix(client);
 
         if (existingDb) {
           databaseStatus = 'existing';
           projectId = existingDb.id;
           projectName = existingDb.name;
-          console.log('[Database] Found existing database:', existingDb.id, existingDb.name);
         }
       }
 
       // Create new database if none found
       if (!projectId) {
         const newProjectName = generateDatabaseName();
-        console.log('[Database] Creating new database:', newProjectName);
 
         const project = await client.createDatabaseProject({
           name: newProjectName,
@@ -116,7 +112,6 @@ export async function POST(request: NextRequest) {
         databaseStatus = 'created';
         projectId = project.id;
         projectName = project.name;
-        console.log('[Database] Created new database:', projectId, projectName);
       }
     } catch (dbError) {
       console.error('[Database] Database provisioning failed:', dbError);
@@ -140,28 +135,24 @@ export async function POST(request: NextRequest) {
           vaultStatus = 'existing';
           vaultId = existingVaultId;
           vaultName = vault.name;
-          console.log('[Vault] Using provided existing vault:', existingVaultId, vault.name);
         } catch (error) {
-          console.warn('[Vault] Provided vault not found, searching for existing...');
+          // Provided vault not found, will search for existing
         }
       }
 
       // Step 2: Search for existing vault by prefix (like database discovery)
       if (!vaultId) {
-        console.log('[Vault] Searching for vault with prefix:', VAULT_NAME);
         const existingVault = await client.findVaultByPrefix(VAULT_NAME);
 
         if (existingVault) {
           vaultStatus = 'existing';
           vaultId = existingVault.id;
           vaultName = existingVault.name;
-          console.log('[Vault] Found existing vault:', existingVault.id, existingVault.name);
         }
       }
 
       // Step 3: Create new vault if none found
       if (!vaultId) {
-        console.log('[Vault] Creating new vault:', VAULT_NAME);
         const vault = await client.createVault({
           name: VAULT_NAME,
           description: 'Evidence Triage Document Storage',
@@ -171,7 +162,6 @@ export async function POST(request: NextRequest) {
         vaultStatus = 'created';
         vaultId = vault.id;
         vaultName = vault.name;
-        console.log('[Vault] Created new vault:', vault.id, vault.name);
       }
     } catch (vaultError) {
       console.error('[Vault] Vault provisioning failed:', vaultError);

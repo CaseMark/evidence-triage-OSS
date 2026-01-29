@@ -37,26 +37,20 @@ export async function POST(request: NextRequest) {
     let targetVaultId = vaultId;
     if (!targetVaultId) {
       // First try to find existing vault by prefix
-      console.log('[Vault Upload] No vault ID provided, searching for existing vault...');
       const existingVault = await client.findVaultByPrefix(VAULT_NAME);
 
       if (existingVault) {
         targetVaultId = existingVault.id;
-        console.log('[Vault Upload] Found existing vault:', existingVault.id, existingVault.name);
       } else {
         // Create new vault if none found
-        console.log('[Vault Upload] Creating new vault:', VAULT_NAME);
         const newVault = await client.createVault({
           name: VAULT_NAME,
           description: 'Evidence Triage Document Storage',
           enableIndexing: true,
         });
         targetVaultId = newVault.id;
-        console.log('[Vault Upload] Created new vault:', newVault.id, newVault.name);
       }
     }
-
-    console.log('[Vault Upload] Uploading to vault:', targetVaultId, 'File:', file.name);
 
     // Get upload URL
     const uploadInfo = await client.getUploadUrl({
@@ -90,8 +84,6 @@ export async function POST(request: NextRequest) {
       vaultId: targetVaultId,
       objectId: uploadInfo.objectId,
     });
-
-    console.log('[Vault Upload] Upload complete:', uploadInfo.objectId);
 
     return NextResponse.json({
       success: true,

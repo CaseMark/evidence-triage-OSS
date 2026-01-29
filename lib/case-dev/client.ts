@@ -153,33 +153,24 @@ export class CaseDevClient {
   }): Promise<{ id: string; name: string }> {
     try {
       const vaults = await this.listVaults();
-      console.log('[CaseDevClient] listVaults returned:', vaults.length, 'vaults');
 
       if (vaults.length > 0) {
-        // Log vault names for debugging
-        console.log('[CaseDevClient] Available vaults:', vaults.map(v => `${v.id}: ${v.name}`).join(', '));
-
         // Try exact match first
         const exactMatch = vaults.find(v => v.name === params.name);
         if (exactMatch) {
-          console.log('[CaseDevClient] Found exact vault match:', exactMatch.id, exactMatch.name);
           return exactMatch;
         }
 
         // Try prefix match (for vaults with unique suffix)
         const prefixMatch = vaults.find(v => v.name.startsWith(params.name));
         if (prefixMatch) {
-          console.log('[CaseDevClient] Found prefix vault match:', prefixMatch.id, prefixMatch.name);
           return prefixMatch;
         }
       }
-
-      console.log('[CaseDevClient] No matching vault found for:', params.name);
     } catch (error) {
-      console.log('[CaseDevClient] Could not list vaults, attempting to create:', error);
+      // Could not list vaults, will create a new one
     }
 
-    console.log('[CaseDevClient] Creating new vault:', params.name);
     return this.createVault(params);
   }
 
@@ -189,12 +180,7 @@ export class CaseDevClient {
   async findVaultByPrefix(prefix: string): Promise<{ id: string; name: string } | null> {
     try {
       const vaults = await this.listVaults();
-      console.log('[CaseDevClient] findVaultByPrefix - searching', vaults.length, 'vaults for prefix:', prefix);
-      const matching = vaults.find(v => v.name.startsWith(prefix));
-      if (matching) {
-        console.log('[CaseDevClient] findVaultByPrefix - found:', matching.id, matching.name);
-      }
-      return matching || null;
+      return vaults.find(v => v.name.startsWith(prefix)) || null;
     } catch (error) {
       console.error('[CaseDevClient] Error finding vault by prefix:', error);
       return null;
@@ -418,8 +404,6 @@ export class CaseDevClient {
       }),
     });
 
-    console.log('[CaseDevClient] Raw search response keys:', Object.keys(response || {}));
-
     // Handle different response formats from case.dev API
     // The API returns results in "chunks" array, with source info in "sources"
     let chunks: any[] = [];
@@ -435,8 +419,6 @@ export class CaseDevClient {
     } else if (response?.data) {
       chunks = response.data;
     }
-
-    console.log('[CaseDevClient] Parsed chunks count:', chunks.length);
 
     // Build a map of source info (object_id -> filename)
     const sourceMap = new Map<string, string>();
@@ -467,13 +449,6 @@ export class CaseDevClient {
 
       const text = chunk.text || '';
 
-      console.log('[CaseDevClient] Processing chunk:', {
-        objectId,
-        hybridScore: chunk.hybridScore,
-        distance: chunk.distance,
-        calculatedScore: score,
-      });
-
       const existing = documentScores.get(objectId);
       if (!existing || score > existing.score) {
         documentScores.set(objectId, { score, text });
@@ -487,15 +462,8 @@ export class CaseDevClient {
 
       // Skip documents that don't have a source entry (orphaned index entries)
       if (!filename) {
-        console.log('[CaseDevClient] Skipping orphaned document:', objectId);
         continue;
       }
-
-      console.log('[CaseDevClient] Mapping result:', {
-        objectId,
-        filename,
-        score,
-      });
 
       results.push({
         objectId,
@@ -509,7 +477,6 @@ export class CaseDevClient {
     // Sort by score descending
     results.sort((a, b) => b.score - a.score);
 
-    console.log('[CaseDevClient] Final results count:', results.length);
     return results;
   }
 

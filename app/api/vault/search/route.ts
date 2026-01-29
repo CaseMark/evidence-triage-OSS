@@ -44,11 +44,6 @@ export async function POST(request: NextRequest) {
       minScore: minScore || 0.3,
     });
 
-    console.log('[Vault Search] Query:', query);
-    console.log('[Vault Search] VaultId:', vaultId);
-    console.log('[Vault Search] Results count:', results.length);
-    console.log('[Vault Search] First result:', results[0]);
-
     return NextResponse.json({
       success: true,
       results,

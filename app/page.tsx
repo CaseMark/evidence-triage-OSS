@@ -140,7 +140,6 @@ export default function EvidenceTriagePage() {
   const performVaultSync = useCallback(async () => {
     const vaultId = getStoredVaultId();
     if (!vaultId) {
-      console.log('[Sync] No vault ID, skipping sync');
       return;
     }
 
@@ -148,7 +147,6 @@ export default function EvidenceTriagePage() {
     setSyncStatus(null);
 
     try {
-      console.log('[Sync] Starting vault sync...');
       const result = await syncFromVault();
 
       // Always reload evidence after sync (database data was loaded into localStorage cache)
@@ -159,17 +157,13 @@ export default function EvidenceTriagePage() {
           synced: result.synced,
           message: `Synced ${result.synced} document${result.synced > 1 ? 's' : ''} from vault`
         });
-        console.log('[Sync] Synced', result.synced, 'documents');
       } else if (result.fromDatabase > 0) {
         setSyncStatus({
           synced: result.fromDatabase,
           message: `Loaded ${result.fromDatabase} document${result.fromDatabase > 1 ? 's' : ''} from database`
         });
-        console.log('[Sync] Loaded', result.fromDatabase, 'documents from database');
       } else if (result.errors.length > 0) {
         console.error('[Sync] Sync errors:', result.errors);
-      } else {
-        console.log('[Sync] No documents found');
       }
     } catch (error) {
       console.error('[Sync] Sync failed:', error);
@@ -372,10 +366,9 @@ export default function EvidenceTriagePage() {
             );
             if (vaultText) {
               extractedText = vaultText;
-              console.log(`[Upload] Got ${extractedText.length} chars from vault OCR`);
             }
           } catch (err) {
-            console.log('[Upload] Vault text not ready yet, falling back to local extraction');
+            // Vault text not ready yet, falling back to local extraction
           }
 
           // Fall back to local extraction if vault text not ready
@@ -383,9 +376,8 @@ export default function EvidenceTriagePage() {
             if (file.type === 'application/pdf') {
               try {
                 extractedText = await extractPdfTextClient(file);
-                console.log(`[PDF] Client-side extracted ${extractedText.length} characters`);
               } catch (err) {
-                console.error('Client-side PDF extraction failed:', err);
+                // Client-side PDF extraction failed
               }
             }
 
@@ -502,7 +494,6 @@ export default function EvidenceTriagePage() {
 
       if (vaultId) {
         // Use vault semantic search (case.dev handles embeddings)
-        console.log('[Search] Using vault semantic search');
         const results = await hybridSearch(searchQuery, {
           categories: filters.categories.length > 0 ? filters.categories : undefined,
           tags: filters.tags.length > 0 ? filters.tags : undefined,
@@ -515,7 +506,6 @@ export default function EvidenceTriagePage() {
           setIsSearchResult(true);
         } else {
           // Fall back to local keyword search
-          console.log('[Search] No vault results, falling back to keyword search');
           const keywordResults = searchEvidence(searchQuery);
           if (keywordResults.length > 0) {
             const scoreMap = new Map(keywordResults.map(r => [r.item.id, r.score]));
@@ -530,7 +520,6 @@ export default function EvidenceTriagePage() {
         }
       } else {
         // No vault, use legacy local search
-        console.log('[Search] Using legacy local search');
         let queryEmbedding: number[] | undefined;
 
         try {
@@ -586,7 +575,6 @@ export default function EvidenceTriagePage() {
             metadata.vaultDocRef.vaultId,
             metadata.vaultDocRef.objectId
           );
-          console.log('[Delete] Removed from vault:', metadata.vaultDocRef.objectId);
         } catch (err) {
           console.error('[Delete] Failed to delete from vault:', err);
           // Continue with local deletion even if vault deletion fails

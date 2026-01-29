@@ -56,24 +56,20 @@ export async function getOrCreateDatabase(client: CaseDevClient): Promise<Databa
     try {
       // Verify the database still exists
       const project = await client.getDatabaseProject(storedProjectId);
-      console.log('[Database] Using stored database:', storedProjectId, project.name);
       return {
         projectId: storedProjectId,
         name: project.name,
         status: 'existing',
       };
     } catch (error) {
-      console.warn('[Database] Stored database not found, searching for existing...', error);
       clearStoredDatabaseProjectId();
     }
   }
 
   // Search for existing database with our prefix
-  console.log('[Database] Searching for database with prefix:', DATABASE_NAME_PREFIX);
   const existingDb = await findDatabaseWithPrefix(client);
 
   if (existingDb) {
-    console.log('[Database] Found existing database:', existingDb.id, existingDb.name);
     storeDatabaseProjectId(existingDb.id);
     return {
       projectId: existingDb.id,
@@ -83,7 +79,6 @@ export async function getOrCreateDatabase(client: CaseDevClient): Promise<Databa
   }
 
   // Create a new database
-  console.log('[Database] Creating new database...');
   const projectName = generateDatabaseName();
 
   try {
@@ -92,7 +87,6 @@ export async function getOrCreateDatabase(client: CaseDevClient): Promise<Databa
       region: 'aws-us-east-1',
     });
 
-    console.log('[Database] Database created:', project.id, project.name);
     storeDatabaseProjectId(project.id);
 
     return {

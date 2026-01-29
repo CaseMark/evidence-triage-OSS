@@ -29,9 +29,7 @@ export async function POST(request: NextRequest) {
 
     const client = new CaseDevClient(apiKey);
 
-    console.log('[Vault Ingest] Triggering ingestion for:', objectId);
     const result = await client.ingestObject({ vaultId, objectId });
-    console.log('[Vault Ingest] Result:', result);
 
     return NextResponse.json({
       success: true,

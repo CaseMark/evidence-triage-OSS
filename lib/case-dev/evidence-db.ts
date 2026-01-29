@@ -103,7 +103,6 @@ export async function initializeDatabase(apiKey: string, projectId: string): Pro
     await sql`CREATE INDEX IF NOT EXISTS idx_evidence_metadata_object_id ON evidence_metadata(object_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_evidence_metadata_category ON evidence_metadata(category)`;
 
-    console.log('[EvidenceDB] Database initialized successfully');
     return true;
   } catch (error) {
     console.error('[EvidenceDB] Failed to initialize database:', error);
@@ -154,7 +153,6 @@ export async function saveEvidenceMetadata(
         updated_at = NOW()
     `;
 
-    console.log('[EvidenceDB] Saved metadata for:', metadata.filename);
     return true;
   } catch (error) {
     console.error('[EvidenceDB] Failed to save metadata:', error);
@@ -297,7 +295,6 @@ export async function updateEvidenceMetadata(
       WHERE id = ${id}
     `;
 
-    console.log('[EvidenceDB] Updated metadata for id:', id);
     return true;
   } catch (error) {
     console.error('[EvidenceDB] Failed to update metadata:', error);
@@ -321,7 +318,6 @@ export async function deleteEvidenceMetadata(
       WHERE id = ${id}
     `;
 
-    console.log('[EvidenceDB] Deleted metadata for id:', id);
     return true;
   } catch (error) {
     console.error('[EvidenceDB] Failed to delete metadata:', error);
@@ -345,7 +341,6 @@ export async function deleteEvidenceMetadataByObjectId(
       WHERE object_id = ${objectId}
     `;
 
-    console.log('[EvidenceDB] Deleted metadata for objectId:', objectId);
     return true;
   } catch (error) {
     console.error('[EvidenceDB] Failed to delete metadata:', error);

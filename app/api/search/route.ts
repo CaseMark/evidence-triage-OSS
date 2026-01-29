@@ -59,8 +59,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[Search] Searching ${documents.length} documents for: "${query}"`);
-
     // Build document list for LLM
     const documentList = documents.map((doc, index) =>
       `${index + 1}. ID: ${doc.id}\n   Filename: ${doc.filename}\n   Category: ${doc.category}\n   Tags: ${doc.tags.join(', ')}\n   Summary: ${doc.summary || 'No summary'}`
@@ -125,8 +123,6 @@ export async function POST(request: NextRequest) {
         .filter(r => r.score > 0)
         .sort((a, b) => b.score - a.score);
     }
-
-    console.log(`[Search] Found ${results.length} relevant documents`);
 
     // Calculate cost based on character count
     // LLM inference pricing: $0.0005 per 1000 characters

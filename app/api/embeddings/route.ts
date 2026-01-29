@@ -32,8 +32,6 @@ export async function POST(request: NextRequest) {
     // Truncate text if too long (max ~8000 tokens for embedding models)
     const truncatedText = text.slice(0, 30000);
 
-    console.log(`[Embeddings] Creating embedding for ${truncatedText.length} characters`);
-
     const response = await fetch(`${API_BASE_URL}/llm/v1/embeddings`, {
       method: 'POST',
       headers: {
@@ -66,8 +64,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    console.log(`[Embeddings] Created embedding with ${embedding.length} dimensions`);
 
     return NextResponse.json({
       success: true,

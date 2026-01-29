@@ -30,9 +30,7 @@ export async function GET(request: NextRequest) {
 
     const client = new CaseDevClient(apiKey);
 
-    console.log('[Vault List Objects] Listing objects in vault:', vaultId);
     const objects = await client.listVaultObjects(vaultId);
-    console.log('[Vault List Objects] Found', objects.length, 'objects');
 
     return NextResponse.json({
       success: true,

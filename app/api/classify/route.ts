@@ -72,7 +72,6 @@ export async function POST(request: NextRequest) {
 
     // Auto-classify images as photo category
     if (contentType && contentType.startsWith('image/')) {
-      console.log(`[Classify] Auto-classifying image as photo: ${filename}`);
       return NextResponse.json({
         success: true,
         classification: {
@@ -93,8 +92,6 @@ export async function POST(request: NextRequest) {
     const documentContext = text
       ? `Filename: ${filename || 'unknown'}\nContent Type: ${contentType || 'unknown'}\n\nDocument Text:\n${text.substring(0, 8000)}`
       : `Filename: ${filename}\nContent Type: ${contentType || 'unknown'}\n\n(No text content available - classify based on filename)`;
-
-    console.log(`[Classify] Classifying document: ${filename}`);
 
     // Call Case.dev LLM API
     const response = await fetch(`${API_BASE_URL}/llm/v1/chat/completions`, {
@@ -163,8 +160,6 @@ export async function POST(request: NextRequest) {
 
     // Ensure relevanceScore is in valid range
     classification.relevanceScore = Math.max(0, Math.min(100, classification.relevanceScore || 50));
-
-    console.log(`[Classify] Result: ${classification.category} (${classification.confidence})`);
 
     // Calculate cost based on character count
     // LLM inference pricing: $0.0005 per 1000 characters

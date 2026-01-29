@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
     if (existingVaultId) {
       try {
         const vault = await client.getVault(existingVaultId);
-        console.log('[Vault Init] Using existing vault:', existingVaultId, vault.name);
         return NextResponse.json({
           success: true,
           vaultId: existingVaultId,
@@ -36,16 +35,14 @@ export async function POST(request: NextRequest) {
           status: 'existing',
         });
       } catch (error) {
-        console.warn('[Vault Init] Existing vault not found, searching for existing...');
+        // Existing vault not found, will search for one
       }
     }
 
     // Step 2: Search for existing vault by prefix
-    console.log('[Vault Init] Searching for vault with prefix:', VAULT_NAME);
     const existingVault = await client.findVaultByPrefix(VAULT_NAME);
 
     if (existingVault) {
-      console.log('[Vault Init] Found existing vault:', existingVault.id, existingVault.name);
       return NextResponse.json({
         success: true,
         vaultId: existingVault.id,
@@ -55,14 +52,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 3: Create new vault if none found
-    console.log('[Vault Init] Creating new vault:', VAULT_NAME);
     const vault = await client.createVault({
       name: VAULT_NAME,
       description: 'Evidence Triage Document Storage',
       enableIndexing: true,
     });
-
-    console.log('[Vault Init] Created new vault:', vault.id, vault.name);
 
     return NextResponse.json({
       success: true,

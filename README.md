@@ -1,84 +1,107 @@
-# Create Legal App
+# Evidence Triage
 
-**The Agent-Optimized Legal Tech Starter Kit.**
+An open-source legal document management application built with [Case.dev](https://case.dev) and Next.js. Upload, organize, and search legal evidence with AI-powered classification and semantic search.
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Next.js](https://img.shields.io/badge/Next.js-15.1-black)](https://nextjs.org)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.0-38bdf8)](https://tailwindcss.com)
+## Features
 
-> 🤖 **Built for Agents**: This repository is designed to be read by AI agents. It includes comprehensive internal documentation (`AGENTS.md` and `skills/`) that guides LLMs in generating production-ready legal tech code.
+- **Document Upload**: Upload PDFs, images, and text files with automatic OCR processing
+- **AI Classification**: Documents are automatically categorized (contracts, emails, medical records, etc.) with suggested tags and relevance scores
+- **Semantic Search**: Find documents by meaning, not just keywords, using hybrid vector + BM25 search
+- **Persistent Storage**: Documents and metadata persist across sessions via Case.dev Vaults and Database
+- **Multiple Views**: Gallery, list, and timeline views for organizing evidence
 
-## 🚀 Overview
+## Case.dev Primitives Used
 
-`create-legal-app` is a modern, opinionated starter kit for building legal technology applications. It provides a solid foundation with Next.js 15, Shadcn UI (Maia theme), and a structure pre-configured for complex legal workflows like document analysis, case management, and secure vaults.
+This application demonstrates three core Case.dev services:
 
-**What makes this different?**
-Most starter kits are just code. This kit includes **Instructional Metadata** (Skills) that teach your AI coding assistant (Cursor, Windsurf, etc.) *exactly* how to implement semantic search, OCR pipelines, and legal-specific workflows using the Case.dev SDK.
+| Service | Purpose |
+|---------|---------|
+| **Vaults** | Document storage with automatic OCR, text extraction, and vector indexing for semantic search |
+| **Database** | Neon PostgreSQL for persistent metadata storage (tags, categories, summaries) |
+| **LLM** | AI-powered document classification and summarization |
 
-## ✨ Features & Stack
+## Getting Started
 
-- **Framework**: [Next.js 15](https://nextjs.org) (App Router)
-- **Language**: TypeScript
-- **Styling**: [Tailwind CSS 4](https://tailwindcss.com) + [Shadcn UI](https://ui.shadcn.com) (Maia Preset)
-- **Font**: [Inter](https://rsms.me/inter/) & [Spectral](https://fonts.google.com/specimen/Spectral) (Serif for legal texts)
-- **Package Manager**: [Bun](https://bun.sh)
-- **Agent Skill System**: Dedicated documentation in `skills/` for:
-    - `case-dev`: Legal AI, Vaults, OCR
-    - `database`: Neon / Postgres schemas (Schema ready)
-    - `auth`: Authentication patterns
+### 1. Get a Case.dev API Key
 
-## 🛠️ Getting Started
+Sign up at [console.case.dev](https://console.case.dev) and create an API key.
 
-### 1. Initialize the Project
+### 2. Clone and Install
 
 ```bash
-git clone https://github.com/CaseMark/create-legal-app.git my-legal-startup
-cd my-legal-startup
-bun install
+git clone https://github.com/CaseMark/evidence-triage-OSS.git
+cd evidence-triage-OSS
+npm install
 ```
 
-### 2. Configure Environment
-
-Copy the example environment file:
+### 3. Configure Environment
 
 ```bash
 cp .env.example .env.local
 ```
 
-Fill in your API keys (get your Case.dev keys from the [Case.dev Console](https://console.case.dev)):
+Add your Case.dev API key to `.env.local`:
 
 ```env
-# .env.local
 CASE_API_KEY=sk_case_...
-DATABASE_URL=postgres://...
 ```
 
-### 3. Run Development Server
+### 4. Run Development Server
 
 ```bash
-bun dev
+npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see the starter page.
+Open [http://localhost:3000](http://localhost:3000) and enter your API key to connect.
 
-## 🤖 For AI Agents
+## Architecture
 
-**Are you an AI?** Start by reading **[AGENTS.md](./AGENTS.md)**.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Next.js Frontend                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Upload → Classify → Display    │    Search → Filter → Display  │
+└─────────────────┬───────────────┴──────────────┬────────────────┘
+                  │                              │
+                  ▼                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     API Routes (Server-Side)                     │
+│  /api/vault/*  │  /api/database/*  │  /api/classify             │
+└────────┬───────┴────────┬──────────┴────────┬───────────────────┘
+         │                │                   │
+         ▼                ▼                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        Case.dev API                              │
+│  Vaults (Storage/OCR/Search)  │  Database (Neon)  │  LLM        │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-1.  **Context**: Read `AGENTS.md` to understand the project architecture and principles.
-2.  **Skills**: Before implementing a feature, check the `skills/` directory. For example, if the user asks for "Document Upload", read `skills/case-dev/SKILL.md`.
-3.  **Conventions**: stricta file naming and `kebab-case` for utilities.
+## Project Structure
 
-## 📚 Documentation Structure
+```
+app/
+├── api/
+│   ├── vault/          # Vault operations (upload, search, delete)
+│   ├── database/       # Metadata CRUD operations
+│   └── classify/       # Document classification
+├── page.tsx            # Main application UI
+lib/
+├── case-dev/
+│   ├── client.ts       # Case.dev API client
+│   └── evidence-db.ts  # Database operations
+├── evidence-service.ts # Core business logic
+└── types/              # TypeScript definitions
+```
 
-- **`/app`**: Next.js App Router (Pages, Layouts, API Routes)
-- **`/components`**: React components (UI primitives in `/ui`, custom in root)
-- **`/lib`**: Shared utilities (Place your `case-dev` client here)
-- **`/skills`**: **The Brain**. Contains Markdown files specifically for AI context.
-    - `/case-dev`: SDK usage, Vaults, Workflows
-    - `/database`: Schema design patterns
-    - `/auth`: Auth flow documentation
+## Tech Stack
 
-## 📄 License
+- **Framework**: Next.js 16 (App Router)
+- **UI**: Tailwind CSS + Shadcn UI
+- **Icons**: Phosphor Icons
+- **Database**: Neon PostgreSQL (via Case.dev)
+- **Storage**: Case.dev Vaults
+- **AI**: Case.dev LLM API
 
-This project is licensed under the [Apache 2.0 License](LICENSE).
+## License
+
+[Apache 2.0](LICENSE)

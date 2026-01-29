@@ -97,12 +97,10 @@ export async function verifyApiKey(key: string): Promise<boolean> {
 
     if (data.database?.projectId) {
       saveDatabaseProjectId(data.database.projectId);
-      console.log('[Database] Project ID stored:', data.database.projectId, 'Status:', data.database.status);
     }
 
     if (data.vault?.vaultId) {
       saveVaultId(data.vault.vaultId);
-      console.log('[Vault] Vault ID stored:', data.vault.vaultId, 'Status:', data.vault.status);
     }
 
     return true;

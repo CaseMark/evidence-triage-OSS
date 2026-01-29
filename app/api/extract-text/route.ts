@@ -58,8 +58,6 @@ async function submitOCR(apiKey: string, documentUrl: string, fileName: string):
   const statusUrl = `${API_BASE_URL}/ocr/v1/${jobId}`;
   const textUrl = `${API_BASE_URL}/ocr/v1/${jobId}/download/json`;
 
-  console.log(`[OCR] Job submitted: ${jobId}, status: ${status}`);
-
   return {
     jobId,
     status,
@@ -150,8 +148,6 @@ async function pollOCRUntilComplete(
   while (attempts < maxAttempts) {
     const status = await getOCRStatus(apiKey, statusUrl, textUrl);
 
-    console.log(`[OCR] Poll attempt ${attempts + 1}: status=${status.status}`);
-
     if (status.status === 'completed') {
       if (!status.text) {
         throw new Error('OCR completed but no text returned');
@@ -194,8 +190,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[Extract] Processing ${file.name} (${file.type})`);
-
     let extractedText = '';
     const contentType = file.type;
     const arrayBuffer = await file.arrayBuffer();
@@ -219,19 +213,15 @@ export async function POST(request: NextRequest) {
           });
           documentUrl = blob.url;
           blobUrl = blob.url;
-          console.log(`[Extract] Uploaded to Vercel Blob: ${documentUrl}`);
         } catch (blobError) {
-          console.error('[Extract] Blob upload failed:', blobError);
           // Fall back to data URL
           const base64 = buffer.toString('base64');
           documentUrl = `data:${contentType};base64,${base64}`;
-          console.log('[Extract] Using data URL fallback');
         }
       } else {
         // No Blob token, use data URL
         const base64 = buffer.toString('base64');
         documentUrl = `data:${contentType};base64,${base64}`;
-        console.log('[Extract] Using data URL (no BLOB_READ_WRITE_TOKEN)');
       }
 
       try {
@@ -246,10 +236,7 @@ export async function POST(request: NextRequest) {
           60,  // max attempts
           3000 // poll every 3 seconds
         );
-
-        console.log(`[Extract] OCR completed: ${extractedText.length} characters`);
       } catch (ocrError) {
-        console.error('[Extract] OCR failed:', ocrError);
         // OCR failed, but we continue with empty text
       }
 
@@ -258,16 +245,12 @@ export async function POST(request: NextRequest) {
       if (blobUrl && blobToken) {
         try {
           await del(blobUrl, { token: blobToken });
-          console.log('[Extract] Blob deleted - user image removed from cloud storage');
         } catch (cleanupError) {
           // Log prominently - manual cleanup may be needed
           console.error('[Extract] PRIVACY WARNING: Failed to delete blob:', cleanupError);
-          console.error('[Extract] Manual cleanup needed for:', blobUrl);
         }
       }
     }
-
-    console.log(`[Extract] Extracted ${extractedText.length} characters from ${file.name}`);
 
     // Calculate cost based on OCR processing
     // OCR pricing estimate: $0.001 per page (rough estimate)

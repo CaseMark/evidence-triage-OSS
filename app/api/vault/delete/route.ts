@@ -32,8 +32,6 @@ export async function POST(request: NextRequest) {
 
     await client.deleteVaultObject({ vaultId, objectId });
 
-    console.log('[Vault Delete] Deleted:', objectId);
-
     return NextResponse.json({
       success: true,
       deletedObjectId: objectId,

@@ -167,7 +167,6 @@ export async function saveMetadataToDatabase(metadata: EvidenceMetadata): Promis
       return false;
     }
 
-    console.log('[EvidenceService] Saved metadata to database:', metadata.vaultDocRef.filename);
     return true;
   } catch (error) {
     console.error('[EvidenceService] Error saving metadata to database:', error);
@@ -264,11 +263,7 @@ export async function initializeDatabase(): Promise<boolean> {
       body: JSON.stringify({ apiKey, projectId }),
     });
 
-    if (response.ok) {
-      console.log('[EvidenceService] Database initialized successfully');
-      return true;
-    }
-    return false;
+    return response.ok;
   } catch (error) {
     console.error('[EvidenceService] Error initializing database:', error);
     return false;
@@ -326,7 +321,6 @@ export async function loadMetadataFromDatabase(): Promise<EvidenceMetadata[]> {
     // Update localStorage cache
     saveAllEvidenceMetadata(metadata);
 
-    console.log('[EvidenceService] Loaded', metadata.length, 'items from database');
     return metadata;
   } catch (error) {
     console.error('[EvidenceService] Error loading metadata from database:', error);
@@ -410,7 +404,6 @@ export async function getOrCreateVault(): Promise<{ vaultId: string } | null> {
 
     if (data.vaultId) {
       storeVaultId(data.vaultId);
-      console.log('[EvidenceService] Vault ready:', data.vaultId, data.status);
       return { vaultId: data.vaultId };
     }
 
@@ -531,18 +524,10 @@ export async function searchVault(
   }
 ): Promise<VaultSearchResult[]> {
   const apiKey = getStoredApiKey();
-  if (!apiKey) {
-    console.log('[EvidenceService] searchVault: No API key');
-    return [];
-  }
+  if (!apiKey) return [];
 
   const vaultId = getStoredVaultId();
-  if (!vaultId) {
-    console.log('[EvidenceService] searchVault: No vault ID');
-    return [];
-  }
-
-  console.log('[EvidenceService] searchVault: Searching vault', vaultId, 'for query:', query);
+  if (!vaultId) return [];
 
   try {
     const response = await fetch('/api/vault/search', {
@@ -558,13 +543,9 @@ export async function searchVault(
       }),
     });
 
-    if (!response.ok) {
-      console.log('[EvidenceService] searchVault: Response not ok:', response.status);
-      return [];
-    }
+    if (!response.ok) return [];
 
     const data = await response.json();
-    console.log('[EvidenceService] searchVault: Got response:', JSON.stringify(data, null, 2));
     return data.results || [];
   } catch (error) {
     console.error('[EvidenceService] Search failed:', error);
@@ -739,8 +720,6 @@ export async function hybridSearch(
     tags?: string[];
   }
 ): Promise<{ item: EvidenceItem; score: number }[]> {
-  console.log('[EvidenceService] hybridSearch: Starting search for:', query);
-
   // Get semantic search results from vault via API
   // Using 'hybrid' method which combines vector + BM25 keyword search
   const vaultResults = await searchVault(query, {
@@ -748,27 +727,18 @@ export async function hybridSearch(
     minScore: 0.01,
     method: 'hybrid'
   });
-  console.log('[EvidenceService] hybridSearch: Got', vaultResults.length, 'vault results');
 
   // Get all metadata
   const allMetadata = getAllEvidenceMetadata();
-  console.log('[EvidenceService] hybridSearch: Have', allMetadata.length, 'metadata records');
 
   // Map vault results to evidence items with scores
   const results: { item: EvidenceItem; score: number }[] = [];
 
   for (const result of vaultResults) {
-    console.log('[EvidenceService] hybridSearch: Processing vault result:', {
-      objectId: result.objectId,
-      filename: result.filename,
-      rawScore: result.score,
-    });
-
     // Find matching metadata
     const metadata = allMetadata.find(
       m => m.vaultDocRef.objectId === result.objectId
     );
-    console.log('[EvidenceService] hybridSearch: Metadata match found:', !!metadata);
 
     if (metadata) {
       // Apply metadata filters
@@ -818,15 +788,6 @@ export async function hybridSearch(
   // Sort by score descending
   results.sort((a, b) => b.score - a.score);
 
-  console.log('[EvidenceService] hybridSearch: Final results count:', results.length);
-  if (results.length > 0) {
-    console.log('[EvidenceService] hybridSearch: First result:', {
-      id: results[0].item.id,
-      filename: results[0].item.filename,
-      score: results[0].score,
-    });
-  }
-
   return results;
 }
 
@@ -874,8 +835,6 @@ export async function syncFromVault(): Promise<{
 
   const projectId = getStoredDatabaseProjectId();
 
-  console.log('[EvidenceService] Starting sync for vault:', vaultId);
-
   // Step 1: Initialize database if we have project ID
   if (projectId) {
     await initializeDatabase();
@@ -884,14 +843,11 @@ export async function syncFromVault(): Promise<{
   // Step 2: Load existing metadata from database
   let existingMetadata: EvidenceMetadata[] = [];
   if (projectId) {
-    console.log('[EvidenceService] Loading metadata from database...');
     existingMetadata = await loadMetadataFromDatabase();
     result.fromDatabase = existingMetadata.length;
-    console.log('[EvidenceService] Loaded', existingMetadata.length, 'items from database');
   } else {
     // Fall back to localStorage if no database
     existingMetadata = getAllEvidenceMetadata();
-    console.log('[EvidenceService] No database available, using localStorage cache');
   }
 
   const existingObjectIds = new Set(existingMetadata.map(m => m.vaultDocRef.objectId));
@@ -908,8 +864,6 @@ export async function syncFromVault(): Promise<{
 
     const data = await response.json();
     const vaultObjects = data.objects || [];
-
-    console.log('[EvidenceService] Found', vaultObjects.length, 'objects in vault');
 
     // Step 4: Create metadata for vault objects not in database
     for (const vaultObject of vaultObjects) {
@@ -947,151 +901,14 @@ export async function syncFromVault(): Promise<{
       }
 
       result.synced++;
-      console.log('[EvidenceService] Synced document:', vaultObject.filename);
     }
 
-    console.log('[EvidenceService] Sync complete:', result);
     return result;
   } catch (error: any) {
     console.error('[EvidenceService] Sync failed:', error);
     result.errors.push(error.message || 'Sync failed');
     return result;
   }
-}
-
-/**
- * Debug function to check vault status and document indexing
- * Call from browser console: await window.debugVault()
- */
-export async function debugVault(): Promise<void> {
-  const apiKey = getStoredApiKey();
-  if (!apiKey) {
-    console.error('[Debug] No API key found');
-    return;
-  }
-
-  const vaultId = getStoredVaultId();
-  if (!vaultId) {
-    console.error('[Debug] No vault ID found');
-    return;
-  }
-
-  console.log('[Debug] === VAULT DIAGNOSTIC ===');
-  console.log('[Debug] Vault ID:', vaultId);
-
-  try {
-    // Get all vault objects
-    const listResponse = await fetch(`/api/vault/list-objects?apiKey=${encodeURIComponent(apiKey)}&vaultId=${encodeURIComponent(vaultId)}`);
-    const listData = await listResponse.json();
-
-    console.log('[Debug] Vault objects:', listData.objects?.length || 0);
-
-    if (listData.objects && listData.objects.length > 0) {
-      for (const obj of listData.objects) {
-        console.log('[Debug] ---');
-        console.log('[Debug] Object ID:', obj.id);
-        console.log('[Debug] Filename:', obj.filename);
-        console.log('[Debug] Status:', obj.status);
-        console.log('[Debug] Content Type:', obj.contentType);
-        console.log('[Debug] Size:', obj.size);
-
-        // Try to get text for this object
-        try {
-          const textResponse = await fetch('/api/vault/document-text', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ apiKey, vaultId, objectId: obj.id }),
-          });
-          const textData = await textResponse.json();
-
-          if (textData.text) {
-            console.log('[Debug] Text extracted: YES (' + textData.text.length + ' chars)');
-            console.log('[Debug] Text preview:', textData.text.substring(0, 200) + '...');
-          } else {
-            console.log('[Debug] Text extracted: NO (still processing or failed)');
-          }
-        } catch (textError) {
-          console.log('[Debug] Text extraction error:', textError);
-        }
-      }
-    }
-
-    // Check local metadata
-    const metadata = getAllEvidenceMetadata();
-    console.log('[Debug] ---');
-    console.log('[Debug] Local metadata records:', metadata.length);
-    metadata.forEach(m => {
-      console.log('[Debug] - ', m.vaultDocRef.filename, '| objectId:', m.vaultDocRef.objectId, '| status:', m.vaultDocRef.status);
-    });
-
-  } catch (error) {
-    console.error('[Debug] Error:', error);
-  }
-}
-
-/**
- * Re-ingest all documents in the vault to trigger reprocessing
- * Call from browser console: await window.reIngestAll()
- */
-export async function reIngestAll(): Promise<void> {
-  const apiKey = getStoredApiKey();
-  if (!apiKey) {
-    console.error('[ReIngest] No API key found');
-    return;
-  }
-
-  const vaultId = getStoredVaultId();
-  if (!vaultId) {
-    console.error('[ReIngest] No vault ID found');
-    return;
-  }
-
-  console.log('[ReIngest] Starting re-ingestion for vault:', vaultId);
-
-  try {
-    // Get all vault objects
-    const listResponse = await fetch(`/api/vault/list-objects?apiKey=${encodeURIComponent(apiKey)}&vaultId=${encodeURIComponent(vaultId)}`);
-    const listData = await listResponse.json();
-
-    if (!listData.objects || listData.objects.length === 0) {
-      console.log('[ReIngest] No objects found in vault');
-      return;
-    }
-
-    console.log('[ReIngest] Found', listData.objects.length, 'objects to re-ingest');
-
-    for (const obj of listData.objects) {
-      console.log('[ReIngest] Re-ingesting:', obj.filename, '(', obj.id, ')');
-
-      try {
-        const response = await fetch('/api/vault/ingest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey, vaultId, objectId: obj.id }),
-        });
-
-        if (response.ok) {
-          console.log('[ReIngest] ✓ Triggered re-ingestion for:', obj.filename);
-        } else {
-          const error = await response.json();
-          console.log('[ReIngest] ✗ Failed to re-ingest:', obj.filename, error);
-        }
-      } catch (err) {
-        console.log('[ReIngest] ✗ Error re-ingesting:', obj.filename, err);
-      }
-    }
-
-    console.log('[ReIngest] Done. Documents will be reprocessed in the background.');
-    console.log('[ReIngest] Wait a minute and try searching again.');
-  } catch (error) {
-    console.error('[ReIngest] Error:', error);
-  }
-}
-
-// Expose debug functions on window for console access
-if (typeof window !== 'undefined') {
-  (window as any).debugVault = debugVault;
-  (window as any).reIngestAll = reIngestAll;
 }
 
 /**

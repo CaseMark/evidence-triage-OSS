@@ -26,7 +26,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[Database Init] Initializing database for project:', projectId);
     const success = await initializeDatabase(apiKey, projectId);
 
     if (success) {
